@@ -211,6 +211,9 @@ export default function HomePage() {
             <p className="mt-2 text-sm font-semibold text-slate-600 sm:text-base">
               {APP_BRAND_TAGLINE}
             </p>
+            <p className="mt-2 text-[11px] font-black tracking-tight text-blue-700 sm:text-xs">
+              {APP_VERSION}
+            </p>
           </header>
 
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row lg:items-stretch">
