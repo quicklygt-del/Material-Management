@@ -24,16 +24,12 @@ function encodeUtf8Lines(lines: string[]): Uint8Array {
  */
 export async function bluetoothSendText(lines: string[]): Promise<void> {
   if (!isWebBluetoothAvailable()) {
-    throw new Error(
-      "此瀏覽器或環境不支援 Web Bluetooth（請使用 Chrome／Edge 並開啟 HTTPS）",
-    );
+    throw new Error("失敗");
   }
 
   const bluetooth = navigator.bluetooth;
   if (!bluetooth) {
-    throw new Error(
-      "此瀏覽器或環境不支援 Web Bluetooth（請使用 Chrome／Edge 並開啟 HTTPS）",
-    );
+    throw new Error("失敗");
   }
 
   const device = await bluetooth.requestDevice({
@@ -42,16 +38,14 @@ export async function bluetoothSendText(lines: string[]): Promise<void> {
   });
 
   const server = await device.gatt?.connect();
-  if (!server) throw new Error("無法連線 GATT");
+  if (!server) throw new Error("失敗");
 
   let service;
   try {
     service = await server.getPrimaryService(NUS_SERVICE);
   } catch {
     await server.disconnect();
-    throw new Error(
-      "找不到 Nordic UART 服務；請確認標籤機為 BLE UART 模組，或改用廠商指定 App。",
-    );
+    throw new Error("失敗");
   }
 
   const tx = await service.getCharacteristic(NUS_TX);

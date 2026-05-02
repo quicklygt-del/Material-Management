@@ -303,7 +303,7 @@ export function QrCenterGenerator() {
       return;
     }
     if (!isWebBluetoothAvailable()) {
-      setErrorMsg("請使用 Chrome／Edge（HTTPS）並允許藍牙。");
+      setErrorMsg("列印失敗");
       return;
     }
     setBusy(true);

@@ -226,9 +226,7 @@ export function LabelWorkbench({
       return;
     }
     if (!isWebBluetoothAvailable()) {
-      setErrorMsg(
-        "目前環境不支援 Web Bluetooth；請用 Chrome／Edge（HTTPS）並允許藍牙。",
-      );
+      setErrorMsg("列印失敗");
       return;
     }
     setBusy(true);
@@ -315,11 +313,7 @@ export function LabelWorkbench({
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-black text-slate-900">資料</h2>
         <p className="mt-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
-          本機標籤前綴（QR 第一段）：{" "}
-          <span className="font-mono text-sm text-slate-900">{labelPrefix}</span>
-          <span className="ml-2 font-semibold text-slate-500">
-            （環境變數 NEXT_PUBLIC_LABEL_PREFIX 或 NEXT_PUBLIC_TENANT_ID）
-          </span>
+          標籤前綴：<span className="font-mono text-sm text-slate-900">{labelPrefix}</span>
         </p>
         <div className="mt-3 grid gap-3">
           {!enableExcel && isBundle && (
@@ -478,16 +472,6 @@ export function LabelWorkbench({
         </div>
       )}
 
-      <p className="text-xs font-semibold leading-relaxed text-slate-500">
-        說明：Web Bluetooth 需 HTTPS；標籤機須支援 BLE UART（常見 Nordic UART）或由廠商提供對應指令。
-        {authMode === "public"
-          ? " 公開區不寫入伺服器紀錄。"
-          : " 標籤紀錄寫入本機資料庫；伺服器請設定 "}
-        {authMode !== "public" && (
-          <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>
-        )}
-        {authMode !== "public" && "。"}
-      </p>
     </div>
   );
 }
