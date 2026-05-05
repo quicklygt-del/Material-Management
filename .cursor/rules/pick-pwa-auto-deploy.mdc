@@ -1,0 +1,13 @@
+---
+description: After substantive pick-pwa changes, run Vercel production deploy
+alwaysApply: true
+---
+
+# pick-pwa 自動部署
+
+當你在本次對話中**修改了** `pick-pwa/` 目錄底下的實質程式、設定或可影響建置／執行之檔（例如 `src/`、`public/`、`package.json`、`next.config.*`、`tailwind.config.*`、環境說明所依賴者），並且 **`npm run build` 已成功**後：
+
+1. 在 `pick-pwa` 目錄執行：`npx vercel --prod --yes`
+2. 在回覆中交代 **Production / 別名網址**（例如 `pick-pwa.vercel.app`）與建置結果
+
+例外（可省略佈署）：僅編輯本規則、純備註 Markdown、或未觸碰 `pick-pwa/` 的變更。
