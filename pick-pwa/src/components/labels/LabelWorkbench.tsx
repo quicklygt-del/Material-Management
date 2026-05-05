@@ -4,12 +4,12 @@ import { useCallback, useMemo, useState } from "react";
 import { parseExcelFirstSheet } from "@/lib/excelSheet";
 import {
   buildLabelQrPayload,
-  getDefaultLabelPrefix,
   LABEL_OPERATION_UNITS,
   type LabelOperationUnit,
   type LabelTypeCode,
   resolveSerialSource,
 } from "@/lib/labelEncoding";
+import { getEffectiveTenantSlug } from "@/lib/tenantContext";
 import {
   bluetoothSendText,
   formatLabelPrintLines,
@@ -69,7 +69,7 @@ export function LabelWorkbench({
   authMode = "session",
 }: Props) {
   const session = getSessionUser();
-  const labelPrefix = useMemo(() => getDefaultLabelPrefix(), []);
+  const labelPrefix = getEffectiveTenantSlug();
 
   const [itemNo, setItemNo] = useState("");
   const [colorCode, setColorCode] = useState("");
@@ -296,6 +296,45 @@ export function LabelWorkbench({
       }
       if (!rows.length) {
         setErrorMsg("未讀到有效資料列");
+        return;
+      }
+      const uniqNos = Array.from(new Set(rows.map((r) => r.item_no.trim()).filter(Boolean)));
+      try {
+        const vr = await fetch(
+          `${window.location.origin}/api/warehouse-ledger/validate-items`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tenant_id: labelPrefix,
+              item_nos: uniqNos,
+            }),
+          },
+        );
+        const vj = (await vr.json()) as {
+          ok?: boolean;
+          missing?: string[];
+          error?: string;
+        };
+        if (!vr.ok) {
+          throw new Error(vj.error || `總帳比對失敗（${vr.status}）`);
+        }
+        if (!vj.ok && (vj.missing?.length ?? 0) > 0) {
+          const ms = vj.missing ?? [];
+          const sample = ms.slice(0, 35).join("、");
+          const more = ms.length > 35 ? ` …等共 ${ms.length} 筆` : "";
+          throw new Error(
+            `以下料號未建於倉儲總帳，無法載入標籤批次：${sample}${more}。請先至「倉儲總帳」匯入。`,
+          );
+        }
+      } catch (e) {
+        if (e instanceof Error) {
+          setErrorMsg(e.message);
+        } else {
+          setErrorMsg("總帳比對發生錯誤");
+        }
+        setBatchRows([]);
+        setBatchIdx(0);
         return;
       }
       setBatchRows(rows);

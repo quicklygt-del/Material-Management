@@ -99,7 +99,7 @@ export function buildLabelQrPayload(params: {
 }): string {
   const prefix = getDefaultLabelPrefix();
   if (!prefix) {
-    throw new Error("請設定環境變數 NEXT_PUBLIC_LABEL_PREFIX（或沿用 NEXT_PUBLIC_TENANT_ID）");
+    throw new Error("請設定公司識別前綴");
   }
   const src = params.serialSource.replace(/\uFEFF/g, "").trim();
   if (params.typeCode !== "B" && params.typeCode !== "D" && !src) {

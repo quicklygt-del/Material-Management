@@ -5,13 +5,23 @@ import { NextResponse } from "next/server";
  * 僅能於 Route Handler / Server Action 使用。
  * 具 service_role 時可繞過 RLS（請只在已驗證業務邏輯後呼叫）。
  */
+/** 與 Vercel／各平台命名對齊：優先 SERVICE_ROLE，並支援少數別名 */
+function getServiceRoleKey(): string {
+  return (
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_SERVICE_KEY ??
+    process.env.SERVICE_ROLE_KEY ??
+    ""
+  ).trim();
+}
+
 export function getSupabaseServiceRoleClient(): SupabaseClient | null {
   const url = (
     process.env.NEXT_PUBLIC_SUPABASE_URL ??
     process.env.SUPABASE_URL ??
     ""
   ).trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  const key = getServiceRoleKey();
   if (!url || !key) return null;
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -24,8 +34,8 @@ export function missingServiceRoleResponse(): NextResponse {
     !process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
     !process.env.SUPABASE_URL?.trim()
       ? "缺少 NEXT_PUBLIC_SUPABASE_URL（或 SUPABASE_URL）。"
-      : !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-        ? "缺少 SUPABASE_SERVICE_ROLE_KEY（請至 Supabase 專案 Settings → API 複製 service_role）。"
+      : !getServiceRoleKey()
+        ? "缺少 SUPABASE_SERVICE_ROLE_KEY（或別名 SUPABASE_SERVICE_KEY）。請在本機 .env.local 或 Vercel Environment Variables 設定 Supabase service_role 密鑰。"
         : "";
   return NextResponse.json(
     {

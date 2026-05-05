@@ -4,4 +4,4 @@ alter table public.label_records
 
 alter table public.label_records
   add constraint label_records_label_type_check
-  check (label_type in ('S', 'R', 'B', 'Q', 'D'));
+  check (label_type in ('S', 'R', 'B', 'Q', 'D', 'UNIVERSAL'));

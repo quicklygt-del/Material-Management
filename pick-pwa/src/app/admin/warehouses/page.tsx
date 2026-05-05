@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
-import { getSessionUser } from "@/lib/auth";
+import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
+import { canAccessWarehouseDashboard, getSessionUser } from "@/lib/auth";
 import { APP_VERSION } from "@/lib/version";
 
 const MAX_W = 5;
@@ -26,8 +27,8 @@ export default function AdminWarehousesPage() {
 
   useEffect(() => {
     const user = getSessionUser();
-    if (!user || user.role !== "admin") {
-      setMsg("僅管理員可進入倉庫管理。");
+    if (!user || !canAccessWarehouseDashboard(user.role)) {
+      setMsg("僅倉儲主管可進入資產分頁設定。");
       return;
     }
     setReady(true);
@@ -140,6 +141,7 @@ export default function AdminWarehousesPage() {
       aria-busy={busy}
       className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 p-6"
     >
+      <WarehouseSupervisorNav />
       <header className="flex items-center justify-between">
         <div>
           <AppBrandHeader section="資產分頁設定" align="left" />

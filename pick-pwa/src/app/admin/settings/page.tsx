@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
-import { getSessionUser } from "@/lib/auth";
+import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
+import { canAccessAdminSettingsPage, getSessionUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { APP_VERSION } from "@/lib/version";
 
@@ -15,6 +17,7 @@ type OperatorRow = {
 };
 
 export default function AdminSettingsPage() {
+  const router = useRouter();
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -25,16 +28,26 @@ export default function AdminSettingsPage() {
   const [editingOp, setEditingOp] = useState<OperatorRow | null>(null);
   const [opFormName, setOpFormName] = useState("");
   const [opFormPassword, setOpFormPassword] = useState("");
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [fieldEntryUrl, setFieldEntryUrl] = useState("");
+
+  useEffect(() => {
+    setFieldEntryUrl(`${window.location.origin}/field`);
+  }, []);
 
   useEffect(() => {
     const user = getSessionUser();
-    if (!user || user.role !== "admin") {
-      setMsg("僅管理員可進入系統設定。");
+    if (user?.role === "system_admin") {
+      router.replace("/admin/other-operations");
+      return;
+    }
+    if (!user || !canAccessAdminSettingsPage(user.role)) {
+      setMsg("僅倉儲主管可進入倉管員設定。");
       return;
     }
     setReady(true);
     setMsg(null);
-  }, []);
+  }, [router]);
 
   const loadOperators = useCallback(async () => {
     const { data, error } = await supabase
@@ -126,17 +139,24 @@ export default function AdminSettingsPage() {
       aria-busy={busy}
       className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 p-6"
     >
+      <WarehouseSupervisorNav />
       <header className="flex items-center justify-between">
         <div>
-          <AppBrandHeader section="系統設定" align="left" />
+          <AppBrandHeader section="倉管員設定" align="left" />
           <p className="mt-2 text-xs font-black text-blue-700">版本：{APP_VERSION}</p>
           <p className="mt-1 text-sm font-semibold text-slate-600">
             現場 QR／手輸內容即<strong>料號（item_no）</strong>，與後台派單品項比對；大批量派單請於管理後台上傳 Excel。盤點模式（盲盤／核對）於<strong>派單匯入</strong>時依任務設定，同一批次可混用。
           </p>
         </div>
-        <Link href="/admin" className="font-bold underline">
-          回管理後台
-        </Link>
+        <div className="flex flex-col items-end gap-2 text-right">
+          <button
+            type="button"
+            onClick={() => router.push("/admin")}
+            className="text-sm font-bold text-slate-600 underline"
+          >
+            回到倉儲主管
+          </button>
+        </div>
       </header>
 
       {msg && (
@@ -146,11 +166,24 @@ export default function AdminSettingsPage() {
       {ready && (
         <>
           <section className="rounded-xl bg-white p-4 shadow">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-xl font-black">倉管員設定</h2>
-              <button onClick={openCreateOperator} className="h-[46px] rounded-lg bg-blue-700 px-4 text-white font-black">
-                新增人員
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQrModalOpen(true)}
+                  className="h-[46px] rounded-lg border-2 border-emerald-700 bg-emerald-50 px-4 font-black text-emerald-950"
+                >
+                  產製倉儲進場 QR
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreateOperator}
+                  className="h-[46px] rounded-lg bg-blue-700 px-4 text-white font-black"
+                >
+                  新增人員
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm font-bold">
@@ -184,6 +217,32 @@ export default function AdminSettingsPage() {
           </section>
 
         </>
+      )}
+
+      {qrModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-xl font-black text-slate-900">倉儲進場 QR</h3>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+              請列印或出示此 QR 供倉管員掃描；手機將開啟現場作業入口。倉管員須先於首頁以本人帳密登入後再進入現場（若未登入將導向登入頁）。
+            </p>
+            {fieldEntryUrl ? (
+              <div className="mt-4 flex justify-center rounded-xl bg-white p-4 ring-1 ring-slate-200">
+                <QRCodeSVG value={fieldEntryUrl} size={220} level="M" />
+              </div>
+            ) : null}
+            <p className="mt-3 break-all text-center text-xs font-bold text-slate-500">
+              {fieldEntryUrl}
+            </p>
+            <button
+              type="button"
+              onClick={() => setQrModalOpen(false)}
+              className="mt-5 min-h-[48px] w-full rounded-xl bg-slate-900 font-black text-white"
+            >
+              關閉
+            </button>
+          </div>
+        </div>
       )}
 
       {opModalOpen && (

@@ -24,11 +24,14 @@ function startEndOfToday(): { startIso: string; endIso: string } {
 
 export async function fetchTodayPickingLogs(
   supabase: SupabaseClient,
+  tenantSlug: string,
 ): Promise<PickingLogExportRow[]> {
   const { startIso, endIso } = startEndOfToday();
+  const tz = tenantSlug.trim();
   const withVariance = await supabase
     .from("picking_logs")
     .select("order_no,item_no,actual_qty,operator,nfc_uid,created_at,variance_note")
+    .eq("tenant_id", tz)
     .gte("created_at", startIso)
     .lt("created_at", endIso)
     .order("created_at", { ascending: false });
@@ -38,6 +41,7 @@ export async function fetchTodayPickingLogs(
     const fallback = await supabase
       .from("picking_logs")
       .select("order_no,item_no,actual_qty,operator,nfc_uid,created_at")
+      .eq("tenant_id", tz)
       .gte("created_at", startIso)
       .lt("created_at", endIso)
       .order("created_at", { ascending: false });

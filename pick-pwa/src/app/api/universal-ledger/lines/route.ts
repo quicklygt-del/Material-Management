@@ -1,0 +1,59 @@
+import { NextResponse } from "next/server";
+import {
+  getDefaultLabelPrefix,
+  normalizeLabelPrefix,
+} from "@/lib/labelEncoding";
+import {
+  getSupabaseServiceRoleClient,
+  missingServiceRoleResponse,
+} from "@/lib/supabaseAdmin";
+
+export const dynamic = "force-dynamic";
+
+/** 指定管理單位之物料卡／帳本明細（時間序） */
+export async function GET(req: Request) {
+  const admin = getSupabaseServiceRoleClient();
+  if (!admin) {
+    return missingServiceRoleResponse();
+  }
+
+  const url = new URL(req.url);
+  const tenant_id =
+    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
+    getDefaultLabelPrefix();
+  const unit_id = url.searchParams.get("unit_id")?.trim();
+
+  if (!tenant_id || !unit_id) {
+    return NextResponse.json(
+      { error: "缺少 tenant 或 unit_id" },
+      { status: 400 },
+    );
+  }
+
+  const { data: zone, error: zErr } = await admin
+    .from("storage_zones")
+    .select("id,tenant_id")
+    .eq("id", unit_id)
+    .maybeSingle();
+  if (zErr || !zone) {
+    return NextResponse.json({ error: "管理單位不存在" }, { status: 400 });
+  }
+  if (normalizeLabelPrefix(String(zone.tenant_id)) !== tenant_id) {
+    return NextResponse.json({ error: "單位與公司識別不符" }, { status: 403 });
+  }
+
+  const { data, error } = await admin
+    .from("universal_ledger_records")
+    .select(
+      "id,created_at,summary,quantity_delta,balance_after,action_type,operator_name,qr_payload,label_record_id",
+    )
+    .eq("tenant_id", tenant_id)
+    .eq("unit_id", unit_id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ lines: data ?? [] });
+}

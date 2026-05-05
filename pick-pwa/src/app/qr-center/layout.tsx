@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { SupervisorOnlyGate } from "@/components/auth/SupervisorOnlyGate";
 import { QrCenterTenantProvider } from "@/lib/qrCenterTenant";
 
 export default function QrCenterLayout({
@@ -14,7 +15,9 @@ export default function QrCenterLayout({
         </div>
       }
     >
-      <QrCenterTenantProvider>{children}</QrCenterTenantProvider>
+      <SupervisorOnlyGate>
+        <QrCenterTenantProvider>{children}</QrCenterTenantProvider>
+      </SupervisorOnlyGate>
     </Suspense>
   );
 }

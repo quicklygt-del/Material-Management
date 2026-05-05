@@ -68,7 +68,7 @@ create table if not exists public.app_users (
   id uuid primary key default gen_random_uuid(),
   username text not null unique,
   password text not null,
-  role text not null check (role in ('warehouse', 'admin')),
+  role text not null check (role in ('warehouse_admin', 'system_admin', 'warehouse_staff')),
   created_at timestamptz not null default now()
 );
 alter table public.app_users add column if not exists created_at timestamptz not null default now();

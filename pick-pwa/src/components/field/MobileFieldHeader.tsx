@@ -19,7 +19,7 @@ export function MobileFieldHeader({ backHref = "/" }: Props) {
           </Link>
           <div className="flex max-w-[min(100%,16rem)] flex-col items-center text-center">
             <h1 className="truncate text-[13px] font-black leading-tight tracking-tight text-slate-900 sm:max-w-none sm:text-sm">
-              其他作業區
+              其他作業區（Operator UI）
             </h1>
             <p className="truncate text-[9px] font-bold leading-tight text-blue-700 sm:text-[10px]">
               {APP_VERSION}

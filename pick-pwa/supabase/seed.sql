@@ -1,16 +1,27 @@
 -- 先執行 schema.sql，再執行本檔
 -- 目的：快速建立可測試「入庫/出貨/盤點 + NFC」資料
 
--- 1) 測試帳號（簡易帳密）
+-- 1) 測試帳號（簡易帳密）：系統管理 admin、倉儲主管 warehouse_admin
 insert into public.app_users (username, password, role, company_id)
 values
-  ('admin', 'admin1234', 'admin', 'CARB'),
-  ('warehouse1', 'wh1234', 'warehouse', 'CARB')
+  ('admin', 'admin1234', 'system_admin', 'CARB'),
+  ('warehouse_admin', 'wa12345', 'warehouse_admin', 'CARB')
 on conflict (username) do update
 set
   password = excluded.password,
   role = excluded.role,
   company_id = coalesce(public.app_users.company_id, excluded.company_id);
+
+-- 1b) 倉管員（warehouse_operators）：李大同、王添
+insert into public.warehouse_operators (name, password, active, company_id)
+values
+  ('李大同', 'wh1234', true, 'CARB'),
+  ('王添', 'wh1234', true, 'CARB')
+on conflict (name) do update
+set
+  password = excluded.password,
+  active = excluded.active,
+  company_id = coalesce(public.warehouse_operators.company_id, excluded.company_id);
 
 -- 2) 測試品項（nfc_uid 請改成你實際標籤）
 insert into public.items (sku, name, nfc_uid, current_stock)
@@ -27,9 +38,9 @@ set
 -- 3) 建立三張待處理單據（入庫/出貨/盤點）
 insert into public.orders (order_no, operation_type, assigned_operator, status)
 values
-  ('IN-20260428-001', 'inbound', 'warehouse1', 'pending'),
-  ('OUT-20260428-001', 'outbound', 'warehouse1', 'pending'),
-  ('ST-20260428-001', 'stocktake', 'warehouse1', 'pending')
+  ('IN-20260428-001', 'inbound', '李大同', 'pending'),
+  ('OUT-20260428-001', 'outbound', '李大同', 'pending'),
+  ('ST-20260428-001', 'stocktake', '李大同', 'pending')
 on conflict (order_no) do update
 set
   operation_type = excluded.operation_type,

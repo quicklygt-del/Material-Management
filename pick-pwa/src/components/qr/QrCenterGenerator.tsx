@@ -49,7 +49,12 @@ function guessCol(labels: string[], needles: string[]): number {
   return -1;
 }
 
-type BatchRow = { item_no: string; color_code: string };
+type BatchRow = {
+  item_no: string;
+  color_code: string;
+  product_name: string;
+  spec: string;
+};
 
 function workflowToLabelType(mode: QrWorkflowMode): LabelTypeCode {
   if (mode === "general") return "S";
@@ -90,6 +95,9 @@ export function QrCenterGenerator() {
 
   const [itemNo, setItemNo] = useState("");
   const [colorCode, setColorCode] = useState("");
+  /** 一般模式、非批次時手動輸入 */
+  const [generalProductName, setGeneralProductName] = useState("");
+  const [generalSpec, setGeneralSpec] = useState("");
   const [surplusQty, setSurplusQty] = useState("");
   const [prevOperator, setPrevOperator] = useState("");
   const [bundleScans, setBundleScans] = useState("");
@@ -112,10 +120,56 @@ export function QrCenterGenerator() {
   const activeItem = useMemo(() => {
     if (mode === "general" && batchRows.length > 0) {
       const r = batchRows[batchIdx] ?? batchRows[0];
-      return { item_no: r.item_no, color_code: r.color_code };
+      return {
+        item_no: r.item_no,
+        color_code: r.color_code,
+        product_name: r.product_name,
+        spec: r.spec,
+      };
     }
-    return { item_no: itemNo, color_code: colorCode };
-  }, [mode, batchRows, batchIdx, itemNo, colorCode]);
+    if (mode === "general") {
+      return {
+        item_no: itemNo,
+        color_code: colorCode,
+        product_name: generalProductName,
+        spec: generalSpec,
+      };
+    }
+    return {
+      item_no: itemNo,
+      color_code: colorCode,
+      product_name: "",
+      spec: "",
+    };
+  }, [
+    mode,
+    batchRows,
+    batchIdx,
+    itemNo,
+    colorCode,
+    generalProductName,
+    generalSpec,
+  ]);
+
+  const patchBatchRow = useCallback(
+    (patch: Partial<BatchRow>) => {
+      setBatchRows((rows) => {
+        if (rows.length === 0) return rows;
+        const next = [...rows];
+        const i = Math.min(batchIdx, next.length - 1);
+        const cur = next[i];
+        if (!cur) return rows;
+        next[i] = {
+          item_no: patch.item_no ?? cur.item_no,
+          color_code: patch.color_code ?? cur.color_code,
+          product_name: patch.product_name ?? cur.product_name,
+          spec: patch.spec ?? cur.spec,
+        };
+        return next;
+      });
+    },
+    [batchIdx],
+  );
 
   const bundleLines = useMemo(
     () =>
@@ -212,6 +266,14 @@ export function QrCenterGenerator() {
       if (prevOperator.trim()) parts.push(`前次 ${prevOperator.trim()}`);
       return parts.filter(Boolean).join("\n") || "—";
     }
+    if (mode === "general") {
+      const parts: string[] = [];
+      if (activeItem.item_no.trim()) parts.push(activeItem.item_no.trim());
+      if (activeItem.product_name.trim()) parts.push(activeItem.product_name.trim());
+      if (activeItem.spec.trim()) parts.push(`規格 ${activeItem.spec.trim()}`);
+      if (activeItem.color_code.trim()) parts.push(`色號 ${activeItem.color_code.trim()}`);
+      return parts.length ? parts.join("\n") : "—";
+    }
     const parts = [activeItem.item_no.trim()];
     if (activeItem.color_code.trim()) parts.push(`色號 ${activeItem.color_code.trim()}`);
     return parts.filter(Boolean).join("\n") || "—";
@@ -250,6 +312,10 @@ export function QrCenterGenerator() {
       operation_unit: operationUnit,
       description: description.trim() || null,
     };
+    if (mode === "general") {
+      meta.product_name = activeItem.product_name.trim() || null;
+      meta.spec = activeItem.spec.trim() || null;
+    }
     if (mode === "surplus_rq") {
       meta.surplus_qty = surplusQty.trim() || null;
       meta.previous_operator = prevOperator.trim() || null;
@@ -293,6 +359,8 @@ export function QrCenterGenerator() {
     qrPayload,
     recordItemNo,
     activeItem.color_code,
+    activeItem.product_name,
+    activeItem.spec,
   ]);
 
   const handlePrint = async () => {
@@ -328,13 +396,13 @@ export function QrCenterGenerator() {
         operationUnit,
       });
       await bluetoothSendText(lines);
-      setSuccessMsg("已建檔並送出藍牙列印");
+      setSuccessMsg("已建檔並送出列印");
       if (mode === "general" && batchRows.length > 1 && batchIdx < batchRows.length - 1) {
         setBatchIdx((i) => i + 1);
       }
     } catch (e) {
       const detail = e instanceof Error ? e.message : "";
-      setErrorMsg(`資料已入庫，但藍牙失敗：${detail}`);
+      setErrorMsg(`資料已入庫，但列印失敗：${detail}`);
     } finally {
       setBusy(false);
     }
@@ -348,6 +416,14 @@ export function QrCenterGenerator() {
       const labels = sheet.columnLabels;
       const idxItem = guessCol(labels, ["item_no", "料號", "品號", "物料"]);
       const idxColor = guessCol(labels, ["color", "色號", "顏色"]);
+      const idxName = guessCol(labels, [
+        "品名",
+        "product_name",
+        "產品名稱",
+        "物料名稱",
+        "品名說明",
+      ]);
+      const idxSpec = guessCol(labels, ["規格", "spec", "型號", "規格說明"]);
       if (idxItem < 0) {
         setErrorMsg("Excel 需含料號欄");
         return;
@@ -358,7 +434,10 @@ export function QrCenterGenerator() {
         if (!item) continue;
         const color =
           idxColor >= 0 ? String(r[idxColor] ?? "").trim() : "";
-        rows.push({ item_no: item, color_code: color });
+        const product_name =
+          idxName >= 0 ? String(r[idxName] ?? "").trim() : "";
+        const spec = idxSpec >= 0 ? String(r[idxSpec] ?? "").trim() : "";
+        rows.push({ item_no: item, color_code: color, product_name, spec });
       }
       if (!rows.length) {
         setErrorMsg("未讀到有效資料列");
@@ -368,7 +447,11 @@ export function QrCenterGenerator() {
       setBatchIdx(0);
       setItemNo(rows[0].item_no);
       setColorCode(rows[0].color_code);
-      setSuccessMsg(`已載入 ${rows.length} 筆`);
+      setGeneralProductName(rows[0].product_name);
+      setGeneralSpec(rows[0].spec);
+      setSuccessMsg(
+        `已載入 ${rows.length} 筆（含品名／規格欄位時會一併帶入）`,
+      );
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "讀檔失敗");
     }
@@ -424,8 +507,37 @@ export function QrCenterGenerator() {
               <input
                 className="min-h-[48px] rounded-lg border border-slate-300 px-3 text-lg font-black"
                 value={activeItem.item_no}
-                onChange={(e) => setItemNo(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (batchRows.length > 0) patchBatchRow({ item_no: v });
+                  else setItemNo(v);
+                }}
                 placeholder="必填"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-slate-700">
+              品名（選填）
+              <input
+                className="min-h-[48px] rounded-lg border border-slate-300 px-3 font-bold"
+                value={activeItem.product_name}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (batchRows.length > 0) patchBatchRow({ product_name: v });
+                  else setGeneralProductName(v);
+                }}
+                placeholder="可手動輸入或由 Excel 帶入"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-slate-700">
+              規格（選填）
+              <input
+                className="min-h-[48px] rounded-lg border border-slate-300 px-3 font-bold"
+                value={activeItem.spec}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (batchRows.length > 0) patchBatchRow({ spec: v });
+                  else setGeneralSpec(v);
+                }}
               />
             </label>
             <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -433,7 +545,11 @@ export function QrCenterGenerator() {
               <input
                 className="min-h-[48px] rounded-lg border border-slate-300 px-3 font-bold"
                 value={activeItem.color_code}
-                onChange={(e) => setColorCode(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (batchRows.length > 0) patchBatchRow({ color_code: v });
+                  else setColorCode(v);
+                }}
               />
             </label>
           </>
@@ -611,7 +727,7 @@ export function QrCenterGenerator() {
           onClick={() => void handlePrint()}
           className="min-h-[56px] flex-1 rounded-xl bg-blue-800 text-lg font-black text-white disabled:opacity-40"
         >
-          {busy ? "處理中…" : "寫入並藍牙列印"}
+          {busy ? "處理中…" : "寫入並列印"}
         </button>
       </div>
 

@@ -11,9 +11,11 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
+import { fireWarehouseLedgerPostMove } from "@/lib/warehouseLedger";
 import { playErrorBeep, playSuccessBeep } from "@/lib/playBeep";
 import { orderGroupKey } from "@/lib/pickingAgg";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { getEffectiveTenantSlug } from "@/lib/tenantContext";
 
 type PickingTaskRow = {
   id: string;
@@ -426,9 +428,9 @@ function OperatePageContent() {
     | "manual"
   >("outbound");
   const [sessionName, setSessionName] = useState("");
-  const [sessionRole, setSessionRole] = useState<"admin" | "warehouse" | null>(
-    null,
-  );
+  const [sessionRole, setSessionRole] = useState<
+    "system_admin" | "warehouse_admin" | "warehouse_staff" | "unit" | null
+  >(null);
   const [tasks, setTasks] = useState<PickingTaskRow[]>([]);
   /** 與後台一致的單號彙總鍵（trim） */
   const [selectedOrderKey, setSelectedOrderKey] = useState("");
@@ -487,9 +489,40 @@ function OperatePageContent() {
   }, []);
 
   useEffect(() => {
-    const u = getSessionUser();
-    setSessionName(u?.username ?? "unknown");
-    setSessionRole(u?.role ?? null);
+    let cancelled = false;
+    void (async () => {
+      const u = getSessionUser();
+      if (u?.username) {
+        if (!cancelled) {
+          setSessionName(u.username);
+          setSessionRole(u.role);
+        }
+        return;
+      }
+      try {
+        const r = await fetch("/api/unit-portal/session", {
+          credentials: "include",
+        });
+        if (!cancelled && r.ok) {
+          const j = (await r.json()) as { portal_login?: string };
+          const pl = String(j.portal_login ?? "").trim();
+          if (pl) {
+            setSessionName(pl);
+            setSessionRole("unit");
+            return;
+          }
+        }
+      } catch {
+        void 0;
+      }
+      if (!cancelled) {
+        setSessionName("unknown");
+        setSessionRole(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -536,6 +569,7 @@ function OperatePageContent() {
         .from("picking_tasks")
         .select("order_no")
         .eq("id", taskIdFromQuery)
+        .eq("tenant_id", getEffectiveTenantSlug())
         .eq("assigned_operator", sessionName)
         .maybeSingle();
       if (pe) {
@@ -566,10 +600,12 @@ function OperatePageContent() {
     const fallbackSel =
       "id,order_no,item_no,item_name,required_qty,status,assigned_operator,started_at,operation_type,picking_logs(actual_qty)";
 
+    const tz = getEffectiveTenantSlug();
     const qb = (sel: string, restrictOrderNo: string | null) => {
       let q = supabase
         .from("picking_tasks")
         .select(sel)
+        .eq("tenant_id", tz)
         .in("status", ["pending", "in_progress", "completed"])
         .eq("assigned_operator", sessionName)
         .order("created_at", { ascending: false })
@@ -682,8 +718,17 @@ function OperatePageContent() {
 
   const runRetentionCleanup = useCallback(async () => {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from("picking_logs").delete().lt("created_at", cutoff);
-    await supabase.from("picking_tasks").delete().lt("created_at", cutoff);
+    const tz = getEffectiveTenantSlug();
+    await supabase
+      .from("picking_logs")
+      .delete()
+      .eq("tenant_id", tz)
+      .lt("created_at", cutoff);
+    await supabase
+      .from("picking_tasks")
+      .delete()
+      .eq("tenant_id", tz)
+      .lt("created_at", cutoff);
   }, [supabase]);
 
   useEffect(() => {
@@ -836,6 +881,7 @@ function OperatePageContent() {
     variance_note: string | null;
   }) => {
     const row: Record<string, unknown> = {
+      tenant_id: getEffectiveTenantSlug(),
       order_no: String(payload.order_no ?? "").trim() || "UNKNOWN",
       item_no: String(payload.item_no ?? "").trim() || "UNKNOWN",
       actual_qty: Math.min(
@@ -890,6 +936,7 @@ function OperatePageContent() {
 
     if (error) {
       const { error: e2 } = await ins({
+        tenant_id: getEffectiveTenantSlug(),
         order_no: row.order_no,
         item_no: row.item_no,
         actual_qty: row.actual_qty,
@@ -923,7 +970,7 @@ function OperatePageContent() {
     task: PickingTaskRow,
     qty: number,
     scanUid: string,
-    opts?: { forceCompleteLine?: boolean },
+    opts?: { forceCompleteLine?: boolean; ledgerShortageForced?: boolean },
   ): Promise<boolean> => {
     if (!Number.isFinite(qty) || qty <= 0) {
       const m = "請輸入有效的領料數（>0）";
@@ -983,6 +1030,7 @@ function OperatePageContent() {
     const { error: upErr } = await supabase
       .from("picking_tasks")
       .update(updates)
+      .eq("tenant_id", getEffectiveTenantSlug())
       .eq("id", task.id);
     if (upErr) {
       const m = `${upErr.message}（派單狀態更新失敗）`;
@@ -998,6 +1046,22 @@ function OperatePageContent() {
         ? `已更新 ${task.item_no} 盤點數`
         : `已更新 ${task.item_no} 領料數 ${qty}`,
     );
+    const lm = rowOperationMode(task);
+    if (lm === "inbound" || lm === "outbound") {
+      fireWarehouseLedgerPostMove({
+        tenant_id: getEffectiveTenantSlug(),
+        item_no: normItemNo(task.item_no),
+        direction: lm,
+        qty: Math.floor(qty),
+        shortage_forced: Boolean(opts?.ledgerShortageForced),
+        order_no: task.order_no,
+        task_id: task.id,
+        operator_name: sessionName,
+        scan_payload: scanUid,
+        seed_item_name:
+          typeof task.item_name === "string" ? task.item_name : "",
+      });
+    }
     // 不可 await loadTasks：彙總 logs 很慢時會阻塞關閉 Modal，使用者無法接續掃描。
     void loadTasks();
     return true;
@@ -1113,11 +1177,75 @@ function OperatePageContent() {
       qty < remaining &&
       forceCompleteLine;
 
+    let ledgerShortageForced = false;
+
+    if (mode === "outbound") {
+      try {
+        const onHandUrl = new URL(
+          "/api/warehouse-ledger/on-hand",
+          window.location.origin,
+        );
+        onHandUrl.searchParams.set("item_no", normItemNo(hit.item_no));
+        onHandUrl.searchParams.set(
+          "tenant",
+          getEffectiveTenantSlug(),
+        );
+        const r = await fetch(onHandUrl.toString());
+        const j = (await r.json()) as {
+          found?: boolean;
+          on_hand?: number;
+          error?: string;
+        };
+        if (!r.ok) {
+          setTaskModalErr(j.error || "讀取總帳失敗");
+          playErrorBeep();
+          vibrate(220);
+          return;
+        }
+        const found = Boolean(j.found);
+        const oh = Number(j.on_hand) || 0;
+        if (!found) {
+          setTaskModalErr(
+            "總帳無此料號，請先於「倉儲總帳」匯入或建檔後再出庫掃描。",
+          );
+          playErrorBeep();
+          vibrate(220);
+          return;
+        }
+        if (qty > oh) {
+          const supervisor =
+            sessionRole === "warehouse_admin" ||
+            sessionRole === "system_admin";
+          const hint = `總帳庫存不足，請檢查資料正確性。\n目前結存：${oh}，本次出庫：${qty}。`;
+          if (!supervisor) {
+            setDangerToast(null);
+            setTaskModalErr(hint);
+            playErrorBeep();
+            vibrate([100, 50, 100, 50, 240]);
+            return;
+          }
+          if (
+            !window.confirm(
+              `${hint}\n\n您為倉儲主管身分，仍可強制執行。\n確定繼續？`,
+            )
+          ) {
+            return;
+          }
+          ledgerShortageForced = true;
+        }
+      } catch {
+        setTaskModalErr("無法連線至總帳服務，請檢查網路後重試。");
+        playErrorBeep();
+        return;
+      }
+    }
+
     const releaseGen = ++submitConfirmGenRef.current;
     let ok = false;
     try {
       ok = await updateTaskProgress(hit, qty, snapshot.nfcPayload, {
         forceCompleteLine: fc ? true : undefined,
+        ledgerShortageForced: ledgerShortageForced ? true : undefined,
       });
     } catch {
       ok = false;
@@ -1306,10 +1434,19 @@ function OperatePageContent() {
     >
       <header className="flex items-center justify-between gap-3 border-b border-slate-300/60 pb-2">
         <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+            Operator UI｜現場作業
+          </p>
           <p className="truncate text-lg font-black text-slate-900">
             {sessionName}
             <span className="text-sm font-bold text-slate-600">
-              {sessionRole === "admin" ? " · 管理員" : " · 倉管員"}
+              {sessionRole === "system_admin"
+                ? " · 系統管理"
+                : sessionRole === "warehouse_admin"
+                  ? " · 倉儲主管"
+                  : sessionRole === "unit"
+                    ? " · 其他作業區"
+                    : " · 倉管員"}
             </span>
           </p>
         </div>
