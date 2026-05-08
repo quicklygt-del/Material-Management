@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WarehouseStyleTaskDeck } from "@/components/warehouse/WarehouseStyleTaskDeck";
 import {
   clearSessionUser,
@@ -19,12 +19,15 @@ import { APP_VERSION } from "@/lib/version";
 export default function OperatorWorkbenchPage() {
   const router = useRouter();
   const [username, setUsername] = useState<string | null>(null);
-  const [scanInput, setScanInput] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<"pick" | "return" | null>(null);
   const [orderNo, setOrderNo] = useState("");
   const [qty, setQty] = useState("1");
-  const [lookupBusy, setLookupBusy] = useState(false);
   const [moveBusy, setMoveBusy] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
+  const [scanManualInput, setScanManualInput] = useState("");
   const [detail, setDetail] = useState<{
     label_record_id: string;
     qr_payload: string;
@@ -33,6 +36,9 @@ export default function OperatorWorkbenchPage() {
     spec?: string;
     on_hand?: number;
   } | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     const u = getSessionUser();
@@ -51,13 +57,27 @@ export default function OperatorWorkbenchPage() {
 
   const tenantId = getDefaultLabelPrefix();
 
-  const runLookup = async () => {
-    const qr = scanInput.trim();
+  const stopScanner = () => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (streamRef.current) {
+      for (const tr of streamRef.current.getTracks()) tr.stop();
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const runLookup = async (rawInput: string) => {
+    const qr = rawInput.trim();
     if (!qr) {
       setScanMsg("請先輸入或掃描 QR / 料號");
       return;
     }
-    setLookupBusy(true);
+    setScanBusy(true);
     setScanMsg(null);
     try {
       const url = new URL("/api/label-records/lookup", window.location.origin);
@@ -99,16 +119,27 @@ export default function OperatorWorkbenchPage() {
         spec: String(j.record.meta?.spec ?? "").trim() || undefined,
         on_hand: Number(balJson.on_hand ?? 0) || 0,
       });
+      setSelectedAction(null);
+      setOrderNo("");
+      setQty("1");
+      setDetailOpen(true);
+      setScanOpen(false);
+      stopScanner();
       setScanMsg("辨識成功，可執行領料或退料。");
     } catch (e) {
       setDetail(null);
       setScanMsg(e instanceof Error ? e.message : "辨識失敗");
     } finally {
-      setLookupBusy(false);
+      setScanBusy(false);
     }
   };
 
-  const submitMove = async (action: "pick" | "return") => {
+  const submitMove = async () => {
+    const action = selectedAction;
+    if (!action) {
+      setScanMsg("請先選擇領料作業或退料作業");
+      return;
+    }
     if (!username || !detail) {
       setScanMsg("請先完成辨識");
       return;
@@ -145,13 +176,73 @@ export default function OperatorWorkbenchPage() {
             }
           : prev,
       );
-      setScanMsg(action === "pick" ? "領料成功，已更新庫存與交易紀錄。" : "退料成功，已更新庫存與交易紀錄。");
+      setScanMsg(
+        action === "pick"
+          ? "領料成功，已更新庫存與交易紀錄。"
+          : "退料成功，已更新庫存與交易紀錄。",
+      );
+      setSelectedAction(null);
+      setOrderNo("");
+      setQty("1");
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : "庫存異動失敗");
     } finally {
       setMoveBusy(false);
     }
   };
+
+  const startQrScan = async () => {
+    if (scanBusy) return;
+    setScanMsg(null);
+    setScanManualInput("");
+    setScanOpen(true);
+    const Detector =
+      typeof window !== "undefined" ? window.BarcodeDetector : undefined;
+    if (!Detector) {
+      setScanMsg("此瀏覽器不支援相機掃描，請改用手動貼上 QR。");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      const det = new Detector({
+        formats: ["qr_code", "code_128", "code_39", "ean_13", "upc_a"],
+      });
+      const loop = async () => {
+        if (!videoRef.current || !scanOpen) return;
+        try {
+          const found = await det.detect(videoRef.current);
+          const code = String(found?.[0]?.rawValue ?? "").trim();
+          if (code) {
+            await runLookup(code);
+            return;
+          }
+        } catch {
+          void 0;
+        }
+        rafRef.current = requestAnimationFrame(() => {
+          void loop();
+        });
+      };
+      void loop();
+    } catch {
+      setScanMsg("無法啟用相機，請檢查權限或改用手動貼上 QR。");
+    }
+  };
+
+  useEffect(() => {
+    if (!scanOpen) stopScanner();
+    return () => {
+      stopScanner();
+    };
+  }, [scanOpen]);
 
   if (!username) {
     return (
@@ -183,78 +274,149 @@ export default function OperatorWorkbenchPage() {
       </header>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
-        <h2 className="text-lg font-black text-slate-900">掃描辨識</h2>
-        <p className="mt-1 text-xs font-semibold text-slate-600">
-          掃描或貼上 QR 後可顯示物料詳情，並執行領料/退料。
-        </p>
-        <div className="mt-3 space-y-2">
-          <input
-            className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900"
-            placeholder="請輸入或掃描 QR / 料號"
-            value={scanInput}
-            onChange={(e) => setScanInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void runLookup();
-            }}
-          />
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <input
-              className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 sm:col-span-2"
-              placeholder="單號（選填）"
-              value={orderNo}
-              onChange={(e) => setOrderNo(e.target.value)}
-            />
-            <input
-              className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900"
-              placeholder="數量"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              inputMode="numeric"
-            />
-          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
-            onClick={() => void runLookup()}
-            disabled={lookupBusy}
-            className="h-11 w-full rounded-xl bg-slate-900 text-sm font-black text-white disabled:opacity-50"
+            onClick={() => void startQrScan()}
+            className="flex h-28 flex-col items-center justify-center rounded-2xl border-4 border-violet-800 bg-violet-600 text-white shadow-md"
           >
-            {lookupBusy ? "辨識中..." : "顯示物料詳情"}
-          </button>
-        </div>
-
-        {detail ? (
-          <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-slate-800">
-            <p>料號：{detail.item_no}</p>
-            <p>
-              品名：{detail.item_name || "-"}
-              {detail.spec ? ` (${detail.spec})` : ""}
-            </p>
-            <p>目前庫存：{Number(detail.on_hand ?? 0)}</p>
-          </div>
-        ) : null}
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => void submitMove("pick")}
-            disabled={moveBusy || !detail}
-            className="h-11 rounded-xl bg-blue-700 text-sm font-black text-white disabled:opacity-40"
-          >
-            領料
+            <span className="text-4xl">⌁</span>
+            <span className="mt-1 text-2xl font-black">點我掃描</span>
           </button>
           <button
             type="button"
-            onClick={() => void submitMove("return")}
-            disabled={moveBusy || !detail}
-            className="h-11 rounded-xl bg-emerald-700 text-sm font-black text-white disabled:opacity-40"
+            onClick={() => router.push(withTenantParam("/operator/transactions"))}
+            className="h-28 rounded-2xl border-2 border-slate-300 bg-white px-4 text-xl font-black text-slate-800 shadow-sm"
           >
-            退料
+            查看領退紀錄
           </button>
         </div>
         {scanMsg ? (
-          <p className="mt-2 text-xs font-bold text-slate-700">{scanMsg}</p>
+          <p className="mt-3 text-sm font-bold text-slate-700">{scanMsg}</p>
         ) : null}
       </section>
+
+      {scanOpen ? (
+        <section className="fixed inset-0 z-[90] flex flex-col gap-3 bg-black/90 p-4">
+          <div className="rounded-xl bg-white p-3">
+            <p className="text-sm font-black text-slate-800">
+              將 QR 對準畫面；若無法辨識可手動貼上。
+            </p>
+          </div>
+          <video
+            ref={videoRef}
+            className="min-h-0 flex-1 rounded-xl bg-black object-cover"
+            playsInline
+            muted
+          />
+          <div className="space-y-2 rounded-xl bg-white p-3">
+            <input
+              className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
+              placeholder="手動貼上 QR / 料號"
+              value={scanManualInput}
+              onChange={(e) => setScanManualInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void runLookup(scanManualInput);
+              }}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void runLookup(scanManualInput)}
+                disabled={scanBusy}
+                className="h-11 rounded-xl bg-blue-700 text-sm font-black text-white disabled:opacity-50"
+              >
+                {scanBusy ? "辨識中..." : "辨識"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanOpen(false)}
+                className="h-11 rounded-xl bg-slate-800 text-sm font-black text-white"
+              >
+                關閉
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {detailOpen && detail ? (
+        <section className="fixed inset-0 z-[95] flex items-end justify-center bg-black/55 p-4 sm:items-center">
+          <div className="w-full max-w-lg rounded-2xl border-4 border-slate-900 bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-black text-slate-900">物料辨識結果</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailOpen(false);
+                  setSelectedAction(null);
+                }}
+                className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-black text-white"
+              >
+                關閉
+              </button>
+            </div>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-800">
+              <p>料號：{detail.item_no}</p>
+              <p>
+                品名：{detail.item_name || "-"}
+                {detail.spec ? ` (${detail.spec})` : ""}
+              </p>
+              <p>目前庫存：{Number(detail.on_hand ?? 0)}</p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedAction("pick")}
+                className={`h-12 rounded-xl text-base font-black text-white ${
+                  selectedAction === "pick" ? "bg-blue-900" : "bg-blue-700"
+                }`}
+              >
+                領料作業
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedAction("return")}
+                className={`h-12 rounded-xl text-base font-black text-white ${
+                  selectedAction === "return" ? "bg-emerald-900" : "bg-emerald-700"
+                }`}
+              >
+                退料作業
+              </button>
+            </div>
+
+            {selectedAction ? (
+              <div className="mt-3 space-y-2 rounded-xl border border-slate-200 p-3">
+                <input
+                  className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
+                  placeholder="單號（選填）"
+                  value={orderNo}
+                  onChange={(e) => setOrderNo(e.target.value)}
+                />
+                <input
+                  className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
+                  placeholder="數量"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  inputMode="numeric"
+                />
+                <button
+                  type="button"
+                  onClick={() => void submitMove()}
+                  disabled={moveBusy}
+                  className="h-11 w-full rounded-xl bg-slate-900 text-sm font-black text-white disabled:opacity-50"
+                >
+                  {moveBusy
+                    ? "送出中..."
+                    : selectedAction === "pick"
+                      ? "確認領料"
+                      : "確認退料"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <WarehouseStyleTaskDeck assignedOperator={username} />
     </main>
