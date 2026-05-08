@@ -8,7 +8,7 @@ import {
   getSessionUser,
   normalizeRole,
 } from "@/lib/auth";
-import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
+import { getEffectiveTenantSlug } from "@/lib/tenantContext";
 import { withTenantParam } from "@/lib/tenantNav";
 import { APP_VERSION } from "@/lib/version";
 
@@ -41,6 +41,11 @@ export default function OperatorWorkbenchPage() {
   const rafRef = useRef<number | null>(null);
   /** 掃描迴圈必須用 ref：避免 `scanOpen` 閉包仍為 false 導致無法辨識 */
   const scanningActiveRef = useRef(false);
+  const scanBusyRef = useRef(false);
+  const lastScanRef = useRef<{ code: string; at: number }>({
+    code: "",
+    at: 0,
+  });
 
   useEffect(() => {
     const u = getSessionUser();
@@ -57,7 +62,11 @@ export default function OperatorWorkbenchPage() {
     router.replace(withTenantParam("/"));
   };
 
-  const tenantId = getDefaultLabelPrefix();
+  const tenantId = getEffectiveTenantSlug();
+
+  useEffect(() => {
+    scanBusyRef.current = scanBusy;
+  }, [scanBusy]);
 
   const stopScanner = () => {
     scanningActiveRef.current = false;
@@ -89,7 +98,13 @@ export default function OperatorWorkbenchPage() {
       const r = await fetch(url.toString());
       const j = (await r.json()) as {
         found?: boolean;
+        message?: string;
         error?: string;
+        inventory?: {
+          item_name?: string;
+          spec?: string;
+          on_hand?: number;
+        };
         record?: {
           id?: string;
           qr_payload?: string;
@@ -100,27 +115,40 @@ export default function OperatorWorkbenchPage() {
           };
         };
       };
-      if (!r.ok) throw new Error(j.error || "辨識失敗");
+      if (!r.ok) {
+        const raw = j.error ?? "";
+        throw new Error(
+          /42703|does not exist|tenant_id/i.test(raw)
+            ? "查無此料號，請檢查資料庫設定"
+            : raw || "辨識失敗",
+        );
+      }
       if (!j.found || !j.record?.id || !j.record?.item_no) {
         setDetail(null);
-        setScanMsg("找不到對應標籤，請確認 QR 是否正確。");
+        setScanMsg(
+          j.message ?? "查無此料號，請檢查資料庫設定",
+        );
         return;
       }
 
-      const balanceUrl = new URL("/api/warehouse-ledger/on-hand", window.location.origin);
-      balanceUrl.searchParams.set("item_no", String(j.record.item_no));
-      const balResp = await fetch(balanceUrl.toString());
-      const balJson = (await balResp.json().catch(() => ({}))) as {
-        on_hand?: number;
-      };
+      const inv = j.inventory;
+      const meta = j.record.meta ?? {};
+      const nameFromLedger = String(inv?.item_name ?? "").trim();
+      const specFromLedger = String(inv?.spec ?? "").trim();
+      const nameFromMeta = String(
+        (meta as { item_name?: string }).item_name ?? "",
+      ).trim();
+      const specFromMeta = String(
+        (meta as { spec?: string }).spec ?? "",
+      ).trim();
 
       setDetail({
         label_record_id: String(j.record.id),
         qr_payload: String(j.record.qr_payload ?? qr),
         item_no: String(j.record.item_no),
-        item_name: String(j.record.meta?.item_name ?? "").trim() || undefined,
-        spec: String(j.record.meta?.spec ?? "").trim() || undefined,
-        on_hand: Number(balJson.on_hand ?? 0) || 0,
+        item_name: nameFromLedger || nameFromMeta || undefined,
+        spec: specFromLedger || specFromMeta || undefined,
+        on_hand: Number(inv?.on_hand ?? 0) || 0,
       });
       setSelectedAction(null);
       setOrderNo("");
@@ -131,7 +159,12 @@ export default function OperatorWorkbenchPage() {
       setScanMsg("辨識成功，可執行領料或退料。");
     } catch (e) {
       setDetail(null);
-      setScanMsg(e instanceof Error ? e.message : "辨識失敗");
+      const m = e instanceof Error ? e.message : "辨識失敗";
+      setScanMsg(
+        /42703|does not exist|failed/i.test(m)
+          ? "查無此料號，請檢查資料庫設定"
+          : m,
+      );
     } finally {
       setScanBusy(false);
     }
@@ -231,6 +264,12 @@ export default function OperatorWorkbenchPage() {
       });
       const loop = async () => {
         if (!videoRef.current || !scanningActiveRef.current) return;
+        if (scanBusyRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            void loop();
+          });
+          return;
+        }
         const v = videoRef.current;
         if (v.videoWidth === 0 || v.videoHeight === 0) {
           rafRef.current = requestAnimationFrame(() => {
@@ -242,6 +281,18 @@ export default function OperatorWorkbenchPage() {
           const found = await det.detect(videoRef.current);
           const code = String(found?.[0]?.rawValue ?? "").trim();
           if (code) {
+            const now = Date.now();
+            const prev = lastScanRef.current;
+            if (
+              code === prev.code &&
+              now - prev.at < 1800
+            ) {
+              rafRef.current = requestAnimationFrame(() => {
+                void loop();
+              });
+              return;
+            }
+            lastScanRef.current = { code, at: now };
             await runLookup(code);
             return;
           }
@@ -346,6 +397,9 @@ export default function OperatorWorkbenchPage() {
             </div>
           </div>
           <div className="shrink-0 space-y-2 rounded-t-2xl bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
+            <p className="text-center text-[11px] font-bold text-slate-500">
+              相機將自動辨識；手動請貼上後按 Enter（與掃描同一支 API）。
+            </p>
             <input
               className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
               placeholder="手動貼上 QR / 料號"
@@ -355,26 +409,16 @@ export default function OperatorWorkbenchPage() {
                 if (e.key === "Enter") void runLookup(scanManualInput);
               }}
             />
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => void runLookup(scanManualInput)}
-                disabled={scanBusy}
-                className="h-11 rounded-xl bg-blue-700 text-sm font-black text-white disabled:opacity-50"
-              >
-                {scanBusy ? "辨識中..." : "辨識"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setScanOpen(false);
-                  stopScanner();
-                }}
-                className="h-11 rounded-xl bg-slate-800 text-sm font-black text-white"
-              >
-                關閉
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setScanOpen(false);
+                stopScanner();
+              }}
+              className="h-11 w-full rounded-xl bg-slate-800 text-sm font-black text-white"
+            >
+              關閉
+            </button>
           </div>
         </section>
       ) : null}
