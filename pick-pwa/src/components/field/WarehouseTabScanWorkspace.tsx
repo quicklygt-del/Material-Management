@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
+import { withTenantParam } from "@/lib/tenantNav";
 import { useQrCenterTenant } from "@/lib/qrCenterTenant";
 
 const TAB_STORAGE_KEY = "wms-warehouse-tab-v1";
@@ -489,7 +490,7 @@ export function WarehouseTabScanWorkspace({
         {!isAssetHub && (
           <div className="mb-3">
             <Link
-              href="/"
+              href={withTenantParam("/")}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full text-xl text-zinc-700 hover:bg-zinc-200/80"
               aria-label="返回"
             >

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { QrCenterGenerator } from "@/components/qr/QrCenterGenerator";
+import { withTenantParam } from "@/lib/tenantNav";
 
 export default function QrCenterHubPage() {
   return (
@@ -14,13 +15,13 @@ export default function QrCenterHubPage() {
           </div>
           <div className="flex shrink-0 flex-col gap-2">
             <Link
-              href="/field"
+              href={withTenantParam("/operator")}
               className="rounded-lg border-2 border-emerald-600 bg-white px-3 py-2 text-center text-xs font-black text-emerald-900 shadow-sm hover:bg-emerald-50"
             >
-              其他作業區
+              倉管員工作台
             </Link>
             <Link
-              href="/"
+              href={withTenantParam("/")}
               className="rounded-lg border-2 border-amber-900 bg-white px-3 py-2 text-center text-xs font-black text-amber-950 shadow-sm transition-colors hover:bg-amber-100"
             >
               門戶首頁

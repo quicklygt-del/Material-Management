@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
   normalizeLabelPrefix,
 } from "@/lib/labelEncoding";
 import {
@@ -8,7 +7,6 @@ import {
   type WarehouseLedgerDirection,
 } from "@/lib/warehouseLedger";
 import { applyWarehouseLedgerMove } from "@/lib/warehouseLedgerServer";
-import { assertTenantWarehouseLedgerAllowed } from "@/lib/warehouseLedgerTenantGuard";
 import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
@@ -30,11 +28,7 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenantId =
-    normalizeLabelPrefix(String(b.tenant_id ?? getDefaultLabelPrefix())) ||
-    getDefaultLabelPrefix();
-  const blocked = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
-  if (blocked) return blocked;
+  const tenantId = normalizeLabelPrefix(String(b.tenant_id ?? "")) || "CARB";
   const itemNo = normLedgerItemNo(b.item_no);
   const direction = String(b.direction ?? "").trim() as WarehouseLedgerDirection;
   const qty = Number(b.qty);

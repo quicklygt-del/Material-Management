@@ -6,7 +6,7 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
 import { canAccessWarehouseDashboard, getSessionUser } from "@/lib/auth";
 import { parseExcelFirstSheet } from "@/lib/excelSheet";
-import { getEffectiveTenantSlug } from "@/lib/tenantContext";
+import { withTenantParam } from "@/lib/tenantNav";
 import { IMPORT_HEADER_GROUPS, normLedgerItemNo } from "@/lib/warehouseLedger";
 import { APP_VERSION } from "@/lib/version";
 
@@ -47,7 +47,6 @@ function guessColIdx(
 }
 
 export default function WarehouseLedgerAdminPage() {
-  const tenant = useMemo(() => getEffectiveTenantSlug(), []);
   const [ready, setReady] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,7 +75,6 @@ export default function WarehouseLedgerAdminPage() {
 
   const loadItems = useCallback(async () => {
     const u = new URL("/api/warehouse-ledger/items", window.location.origin);
-    u.searchParams.set("tenant", tenant);
     u.searchParams.set("limit", "500");
     u.searchParams.set("offset", "0");
     if (qApplied.trim()) u.searchParams.set("q", qApplied.trim());
@@ -89,7 +87,7 @@ export default function WarehouseLedgerAdminPage() {
     if (!res.ok) throw new Error(json.error || "讀取失敗");
     setItems(json.items ?? []);
     setCount(json.count ?? 0);
-  }, [tenant, qApplied]);
+  }, [qApplied]);
 
   useEffect(() => {
     if (!ready) return;
@@ -121,7 +119,6 @@ export default function WarehouseLedgerAdminPage() {
     setLoadingLines((o) => ({ ...o, [key]: true }));
     try {
       const u = new URL("/api/warehouse-ledger/lines", window.location.origin);
-      u.searchParams.set("tenant", tenant);
       u.searchParams.set("item_no", itemNo);
       u.searchParams.set("limit", "80");
       const res = await fetch(u.toString());
@@ -183,7 +180,7 @@ export default function WarehouseLedgerAdminPage() {
         const res = await fetch("/api/warehouse-ledger/bulk-import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenant_id: tenant, rows: part }),
+          body: JSON.stringify({ rows: part }),
         });
         const json = (await res.json()) as { error?: string; upserted?: number };
         if (!res.ok) throw new Error(json.error || "上傳失敗");
@@ -202,14 +199,12 @@ export default function WarehouseLedgerAdminPage() {
 
   const downloadMoves = () => {
     const u = new URL("/api/warehouse-ledger/export", window.location.origin);
-    u.searchParams.set("tenant", tenant);
     u.searchParams.set("scope", "lines");
     window.open(u.toString(), "_blank", "noopener,noreferrer");
   };
 
   const downloadStock = () => {
     const u = new URL("/api/warehouse-ledger/export", window.location.origin);
-    u.searchParams.set("tenant", tenant);
     u.searchParams.set("scope", "stock");
     window.open(u.toString(), "_blank", "noopener,noreferrer");
   };
@@ -222,11 +217,10 @@ export default function WarehouseLedgerAdminPage() {
           <div>
             <AppBrandHeader section="倉儲總帳" align="left" />
             <p className="mt-1 text-xs font-black text-blue-800">
-              版本：{APP_VERSION} · 租戶前綴{" "}
-              <span className="font-mono">{tenant}</span>
+              版本：{APP_VERSION}
             </p>
           </div>
-          <Link href="/admin" className="font-bold text-blue-800 underline">
+          <Link href={withTenantParam("/admin")} className="font-bold text-blue-800 underline">
             回派單控制台
           </Link>
         </header>

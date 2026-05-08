@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { normalizeLabelPrefix } from "@/lib/labelEncoding";
+import { withTenantParam } from "@/lib/tenantNav";
 
 /** 正式身分（DB／Session 以新值為準；舊值讀取時會正規化） */
 export type UserRole = "warehouse_admin" | "system_admin" | "warehouse_staff";
@@ -38,7 +39,7 @@ export function roleDisplayLabel(role: UserRole | undefined): string {
 
 export function postLoginRedirectPath(role: UserRole): string {
   if (role === "warehouse_admin") return "/admin";
-  if (role === "warehouse_staff") return "/field";
+  if (role === "warehouse_staff") return "/operator";
   if (role === "system_admin") return "/admin/other-operations";
   return "/";
 }
@@ -46,7 +47,7 @@ export function postLoginRedirectPath(role: UserRole): string {
 /** 回到首頁登入：清除 pick-pwa 本機身分，避免已登入者被自動導回後台造成循環。 */
 export function exitToLoginHome(router: { replace: (href: string) => void }) {
   clearSessionUser();
-  router.replace("/");
+  router.replace(withTenantParam("/"));
 }
 
 function isValidStoredRole(x: unknown): x is UserRole {

@@ -24,27 +24,26 @@ function startEndOfToday(): { startIso: string; endIso: string } {
 
 export async function fetchTodayPickingLogs(
   supabase: SupabaseClient,
-  tenantSlug: string,
+  _tenantSlug: string,
 ): Promise<PickingLogExportRow[]> {
   const { startIso, endIso } = startEndOfToday();
-  const tz = tenantSlug.trim();
-  const withVariance = await supabase
+  let vq = supabase
     .from("picking_logs")
     .select("order_no,item_no,actual_qty,operator,nfc_uid,created_at,variance_note")
-    .eq("tenant_id", tz)
     .gte("created_at", startIso)
     .lt("created_at", endIso)
     .order("created_at", { ascending: false });
+  const withVariance = await vq;
   let data = withVariance.data as PickingLogExportRow[] | null;
   let error = withVariance.error;
   if (error?.message.includes("variance_note")) {
-    const fallback = await supabase
+    let fq = supabase
       .from("picking_logs")
       .select("order_no,item_no,actual_qty,operator,nfc_uid,created_at")
-      .eq("tenant_id", tz)
       .gte("created_at", startIso)
       .lt("created_at", endIso)
       .order("created_at", { ascending: false });
+    const fallback = await fq;
     data = (fallback.data ?? []).map((x) => ({ ...x, variance_note: null }));
     error = fallback.error;
   }

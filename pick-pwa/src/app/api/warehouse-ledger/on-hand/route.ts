@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   normLedgerItemNo,
 } from "@/lib/warehouseLedger";
 import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import { assertTenantWarehouseLedgerAllowed } from "@/lib/warehouseLedgerTenantGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +16,6 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const tenantId =
-    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
-    getDefaultLabelPrefix();
-
-  const denied = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
-  if (denied) return denied;
 
   const itemNo = normLedgerItemNo(url.searchParams.get("item_no"));
 
@@ -34,30 +23,53 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "缺少 item_no" }, { status: 400 });
   }
 
-  const { data: row, error } = await admin
+  let row: { stock_quantity?: number | null; on_hand?: number | null } | null = null;
+  let errorMessage = "";
+  const first = await admin
     .from("warehouse_ledger_stock")
-    .select("on_hand")
-    .eq("tenant_id", tenantId)
+    .select("stock_quantity")
     .eq("item_no", itemNo)
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!first.error) {
+    row = first.data as { stock_quantity?: number | null } | null;
+  } else {
+    errorMessage = first.error.message || "";
+    if (/column .*stock_quantity.* does not exist/i.test(errorMessage)) {
+      const fallback = await admin
+        .from("warehouse_ledger_stock")
+        .select("on_hand")
+        .eq("item_no", itemNo)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (fallback.error) {
+        return NextResponse.json(
+          { error: fallback.error.message || errorMessage },
+          { status: 500 },
+        );
+      }
+      row = fallback.data as { on_hand?: number | null } | null;
+    } else {
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
+    }
   }
 
   if (!row) {
     return NextResponse.json({
       found: false,
       on_hand: 0,
-      tenant_id: tenantId,
       item_no: itemNo,
     });
   }
 
   return NextResponse.json({
     found: true,
-    on_hand: Number(row.on_hand) || 0,
-    tenant_id: tenantId,
+    on_hand:
+      Number(
+        row?.stock_quantity ?? row?.on_hand,
+      ) || 0,
     item_no: itemNo,
   });
 }

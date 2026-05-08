@@ -1,0 +1,18 @@
+{
+  "name": "material-nfc-final",
+  "private": true,
+  "description": "Repo root for Vercel/Git: Next.js app lives in pick-pwa/",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "scripts": {
+    "build": "npm run build --prefix pick-pwa",
+    "start": "npm run start --prefix pick-pwa",
+    "dev": "npm run dev --prefix pick-pwa"
+  }
+}

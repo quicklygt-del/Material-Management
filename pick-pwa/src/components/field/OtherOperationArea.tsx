@@ -323,7 +323,7 @@ export function OtherOperationArea() {
     const q = new URLSearchParams(searchParams.toString());
     q.delete("camera");
     const s = q.toString();
-    router.replace(s ? `/field?${s}` : "/field", { scroll: false });
+    router.replace(s ? `/operator?${s}` : "/operator", { scroll: false });
   }, [router, searchParams]);
 
   const normalizedQuery = debouncedQ.trim();

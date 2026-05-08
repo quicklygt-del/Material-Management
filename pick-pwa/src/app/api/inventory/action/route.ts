@@ -7,6 +7,10 @@ import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
+import {
+  storageZonesSelectIdScope,
+  zoneRowScopeValue,
+} from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -57,13 +61,17 @@ export async function POST(req: Request) {
 
   const { data: wh, error: wErr } = await admin
     .from("storage_zones")
-    .select("id,tenant_id")
+    .select(storageZonesSelectIdScope())
     .eq("id", warehouse_id)
     .maybeSingle();
   if (wErr || !wh) {
     return NextResponse.json({ error: "倉庫不存在" }, { status: 400 });
   }
-  if (normalizeLabelPrefix(String(wh.tenant_id)) !== tenant_id) {
+  if (
+    normalizeLabelPrefix(
+      zoneRowScopeValue(wh as { tenant_id?: unknown; company_id?: unknown }),
+    ) !== tenant_id
+  ) {
     return NextResponse.json({ error: "倉庫與租戶不符" }, { status: 403 });
   }
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { withTenantParam } from "@/lib/tenantNav";
 
 type PlatRow = {
   id: string;
@@ -23,7 +24,7 @@ export default function SuperAdminLabelTemplatesPage() {
     const auth = await fetch("/api/super-admin/session");
     const j = (await auth.json()) as { authenticated?: boolean };
     if (!j.authenticated) {
-      router.replace("/super-admin/login");
+      router.replace(withTenantParam("/super-admin/login"));
       return false;
     }
     const res = await fetch("/api/super-admin/platform-label-templates");
@@ -78,7 +79,7 @@ export default function SuperAdminLabelTemplatesPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-black text-white">標籤格式公版</h1>
         <Link
-          href="/super-admin"
+          href={withTenantParam("/super-admin")}
           className="text-xs font-black text-amber-300 underline"
         >
           ← 總控

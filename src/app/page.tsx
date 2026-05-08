@@ -52,7 +52,7 @@ async function loadUsernamesClientFallback(
 
   const { data: opRows } = await supabase
     .from("warehouse_operators")
-    .select("name")
+    .select("name,company_id")
     .eq("active", true)
     .eq("company_id", tenant);
   for (const row of opRows ?? []) {
@@ -63,7 +63,7 @@ async function loadUsernamesClientFallback(
   const { data: zoneRows } = await supabase
     .from("storage_zones")
     .select("portal_login")
-    .eq("tenant_id", tenant);
+    .eq("company_id", tenant);
   for (const row of zoneRows ?? []) {
     const x = String(row.portal_login ?? "").trim();
     if (x) seen.add(x);

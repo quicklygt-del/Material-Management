@@ -7,6 +7,8 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
 import { canAccessAdminSettingsPage, getSessionUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { getEffectiveTenantSlug } from "@/lib/tenantContext";
+import { withTenantParam } from "@/lib/tenantNav";
 import { APP_VERSION } from "@/lib/version";
 
 type OperatorRow = {
@@ -28,17 +30,20 @@ export default function AdminSettingsPage() {
   const [editingOp, setEditingOp] = useState<OperatorRow | null>(null);
   const [opFormName, setOpFormName] = useState("");
   const [opFormPassword, setOpFormPassword] = useState("");
-  const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [fieldEntryUrl, setFieldEntryUrl] = useState("");
+  const [qrTarget, setQrTarget] = useState<OperatorRow | null>(null);
 
-  useEffect(() => {
-    setFieldEntryUrl(`${window.location.origin}/field`);
+  const buildOperatorEntryUrl = useCallback((operatorName: string) => {
+    const tenant = getEffectiveTenantSlug();
+    const u = new URL("/", window.location.origin);
+    u.searchParams.set("tenant", tenant);
+    u.searchParams.set("prefill", operatorName.trim());
+    return u.toString();
   }, []);
 
   useEffect(() => {
     const user = getSessionUser();
     if (user?.role === "system_admin") {
-      router.replace("/admin/other-operations");
+      router.replace(withTenantParam("/admin/other-operations"));
       return;
     }
     if (!user || !canAccessAdminSettingsPage(user.role)) {
@@ -50,9 +55,11 @@ export default function AdminSettingsPage() {
   }, [router]);
 
   const loadOperators = useCallback(async () => {
+    const tenant = getEffectiveTenantSlug();
     const { data, error } = await supabase
       .from("warehouse_operators")
       .select("id,name,password,active")
+      .eq("company_id", tenant)
       .order("name", { ascending: true });
     if (error) {
       setMsg(error.message);
@@ -95,17 +102,27 @@ export default function AdminSettingsPage() {
     }
     setBusy(true);
     setMsg(null);
+    const tenant = getEffectiveTenantSlug();
     try {
       let error: { message: string } | null = null;
       if (editingOp) {
         ({ error } = await supabase
           .from("warehouse_operators")
-          .update({ name, password: opFormPassword })
+          .update({
+            name,
+            password: opFormPassword,
+            company_id: tenant,
+          })
           .eq("id", editingOp.id));
       } else {
         ({ error } = await supabase
           .from("warehouse_operators")
-          .insert({ name, password: opFormPassword, active: true }));
+          .insert({
+            name,
+            password: opFormPassword,
+            active: true,
+            company_id: tenant,
+          }));
       }
       if (error) throw new Error(error.message);
       setOpModalOpen(false);
@@ -151,7 +168,7 @@ export default function AdminSettingsPage() {
         <div className="flex flex-col items-end gap-2 text-right">
           <button
             type="button"
-            onClick={() => router.push("/admin")}
+            onClick={() => router.push(withTenantParam("/admin"))}
             className="text-sm font-bold text-slate-600 underline"
           >
             回到倉儲主管
@@ -169,13 +186,6 @@ export default function AdminSettingsPage() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-xl font-black">倉管員設定</h2>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setQrModalOpen(true)}
-                  className="h-[46px] rounded-lg border-2 border-emerald-700 bg-emerald-50 px-4 font-black text-emerald-950"
-                >
-                  產製倉儲進場 QR
-                </button>
                 <button
                   type="button"
                   onClick={openCreateOperator}
@@ -200,7 +210,16 @@ export default function AdminSettingsPage() {
                       <td className="py-3 pr-3">{op.name}</td>
                       <td className="py-3 pr-3">{op.active ? "啟用" : "停用"}</td>
                       <td className="py-3 pr-3">
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            title="產生此人專用進場 QR"
+                            disabled={!op.active}
+                            onClick={() => setQrTarget(op)}
+                            className="min-h-[40px] rounded-lg border-2 border-emerald-700 bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            進場 QR
+                          </button>
                           <button onClick={() => openEditOperator(op)} className="rounded bg-blue-700 px-3 py-2 text-white">
                             編輯
                           </button>
@@ -219,31 +238,36 @@ export default function AdminSettingsPage() {
         </>
       )}
 
-      {qrModalOpen && (
+      {qrTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-            <h3 className="text-xl font-black text-slate-900">倉儲進場 QR</h3>
+            <h3 className="text-xl font-black text-slate-900">
+              倉儲進場 QR · {qrTarget.name}
+            </h3>
             <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
-              請列印或出示此 QR 供倉管員掃描；手機將開啟現場作業入口。倉管員須先於首頁以本人帳密登入後再進入現場（若未登入將導向登入頁）。
+              此 QR 僅連結至<strong> {qrTarget.name} </strong>
+              的登入入口：掃描後會開啟首頁並自動帶入帳號，請再輸入密碼登入，登入成功後可進入倉管員工作台／現場作業。
             </p>
-            {fieldEntryUrl ? (
-              <div className="mt-4 flex justify-center rounded-xl bg-white p-4 ring-1 ring-slate-200">
-                <QRCodeSVG value={fieldEntryUrl} size={220} level="M" />
-              </div>
-            ) : null}
+            <div className="mt-4 flex justify-center rounded-xl bg-white p-4 ring-1 ring-slate-200">
+              <QRCodeSVG
+                value={buildOperatorEntryUrl(qrTarget.name)}
+                size={220}
+                level="M"
+              />
+            </div>
             <p className="mt-3 break-all text-center text-xs font-bold text-slate-500">
-              {fieldEntryUrl}
+              {buildOperatorEntryUrl(qrTarget.name)}
             </p>
             <button
               type="button"
-              onClick={() => setQrModalOpen(false)}
+              onClick={() => setQrTarget(null)}
               className="mt-5 min-h-[48px] w-full rounded-xl bg-slate-900 font-black text-white"
             >
               關閉
             </button>
           </div>
         </div>
-      )}
+      ) : null}
 
       {opModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

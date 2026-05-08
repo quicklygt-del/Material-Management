@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { withTenantParam } from "@/lib/tenantNav";
 
 export default function SuperAdminLoginPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function SuperAdminLoginPage() {
       try {
         const r = await fetch("/api/super-admin/session");
         const j = (await r.json()) as { authenticated?: boolean };
-        if (j.authenticated) router.replace("/super-admin");
+        if (j.authenticated) router.replace(withTenantParam("/super-admin"));
       } catch {
         void 0;
       }
@@ -40,7 +41,7 @@ export default function SuperAdminLoginPage() {
         setMsg(j.error || "登入失敗");
         return;
       }
-      router.replace("/super-admin");
+      router.replace(withTenantParam("/super-admin"));
     } catch {
       setMsg("連線失敗");
     } finally {
@@ -93,7 +94,7 @@ export default function SuperAdminLoginPage() {
       </div>
 
       <Link
-        href="/"
+        href={withTenantParam("/")}
         className="mt-8 text-center text-xs font-bold text-slate-500 underline"
       >
         回到門戶首頁

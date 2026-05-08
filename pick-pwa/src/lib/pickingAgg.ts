@@ -47,7 +47,7 @@ function pickingLogOrderQueryVariants(distinctOrders: string[]): string[] {
 export async function aggregatePickingLogQtyByOrders(
   supabase: SupabaseClient,
   distinctOrderStrings: string[],
-  tenantSlug?: string,
+  _tenantSlug?: string,
 ): Promise<Map<string, number>> {
   const qtyByPair = new Map<string, number>();
   const uniq = Array.from(
@@ -62,9 +62,6 @@ export async function aggregatePickingLogQtyByOrders(
       .from("picking_logs")
       .select("order_no,item_no,actual_qty")
       .in("order_no", slice);
-    if (tenantSlug) {
-      q = q.eq("tenant_id", tenantSlug);
-    }
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     for (const lg of data ?? []) {

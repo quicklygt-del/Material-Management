@@ -11,6 +11,7 @@ import {
 } from "react";
 import { APP_BRAND_TAGLINE } from "@/components/AppBrandHeader";
 import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
+import { withTenantParam } from "@/lib/tenantNav";
 import { APP_VERSION } from "@/lib/version";
 
 function OtherOperationsLoginInner() {
@@ -88,7 +89,7 @@ function OtherOperationsLoginInner() {
     <main className="flex min-h-[100dvh] flex-col bg-gradient-to-b from-emerald-50 to-white px-4 py-8">
       <div className="mx-auto w-full max-w-md">
         <Link
-          href="/"
+          href={withTenantParam("/")}
           className="mb-6 inline-block text-sm font-bold text-emerald-800 underline"
         >
           ← 回首頁

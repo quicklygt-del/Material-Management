@@ -7,6 +7,7 @@ import {
   getDefaultLabelPrefix,
   normalizeLabelPrefix,
 } from "@/lib/labelEncoding";
+import { getStorageZonesScopeColumn } from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ function sortUsernames(usernames: string[]): string[] {
 
 /**
  * 首頁登入帳號清單（依租戶篩選）：
- * app_users、warehouse_operators（company_id）、storage_zones.portal_login（tenant_id）。
+ * app_users、warehouse_operators（company_id）、storage_zones（範圍欄位見 storageZonesScope）。
  */
 export async function GET(req: Request) {
   const adminClient = getSupabaseServiceRoleClient();
@@ -75,10 +76,11 @@ export async function GET(req: Request) {
     if (name) seen.add(name);
   }
 
+  const szCol = getStorageZonesScopeColumn();
   const { data: zoneRows, error: zoneErr } = await adminClient
     .from("storage_zones")
     .select("portal_login")
-    .eq("tenant_id", tenantId);
+    .eq(szCol, tenantId);
 
   if (zoneErr) {
     return NextResponse.json(

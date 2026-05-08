@@ -15,13 +15,16 @@ import { fireWarehouseLedgerPostMove } from "@/lib/warehouseLedger";
 import { playErrorBeep, playSuccessBeep } from "@/lib/playBeep";
 import { orderGroupKey } from "@/lib/pickingAgg";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { getEffectiveTenantSlug } from "@/lib/tenantContext";
+import { withTenantParam } from "@/lib/tenantNav";
 
 type PickingTaskRow = {
   id: string;
   order_no: string;
   item_no: string;
+  item_code?: string;
   item_name?: string;
+  spec?: string;
+  unit?: string;
   required_qty: number;
   picked_qty: number;
   status: string;
@@ -80,14 +83,14 @@ function normItemNo(s: string) {
   return s.replace(/\uFEFF/g, "").trim();
 }
 
-/** QR／手輸內容解析為料號：純字串或常見 URL 查詢參數（item_no / item / sku / code） */
+/** QR／手輸內容解析為料號：純字串或常見 URL 查詢參數（item_no / item_code / item / sku / code） */
 function parseScanAsItemNo(raw: string): string | null {
   const trimmed = String(raw ?? "").replace(/\uFEFF/g, "").trim();
   if (!trimmed) return null;
 
   const fromQueryKey = (s: string): string | null => {
     const m =
-      /(?:^|[?&#])(?:item_no|item|sku|code)=([^&#]+)/i.exec(s);
+      /(?:^|[?&#])(?:item_no|item_code|item|sku|code)=([^&#]+)/i.exec(s);
     if (!m?.[1]) return null;
     try {
       const v = decodeURIComponent(m[1].replace(/\+/g, " "));
@@ -106,6 +109,7 @@ function parseScanAsItemNo(raw: string): string | null {
       const u = new URL(trimmed);
       const qp =
         u.searchParams.get("item_no") ||
+        u.searchParams.get("item_code") ||
         u.searchParams.get("item") ||
         u.searchParams.get("sku") ||
         u.searchParams.get("code");
@@ -126,6 +130,42 @@ function parseScanAsItemNo(raw: string): string | null {
 
   const direct = normItemNo(trimmed);
   return direct.length ? direct : null;
+}
+
+/** 品名＋規格（含 QR 內嵌長字串時給現場辨識） */
+function formatItemNameSpecLine(t: PickingTaskRow): string {
+  const name = normItemNo(String(t.item_name ?? "")).trim();
+  const spec = normItemNo(String(t.spec ?? "")).trim();
+  if (name && spec) return `${name} (${spec})`;
+  if (name) return name;
+  if (spec) return spec;
+  return "";
+}
+
+/** 從掃描原始字串抽出可能料號（含複合 QR：料號|品名|規格） */
+function collectItemCodeCandidates(raw: string): string[] {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  const add = (s: string) => {
+    const n = normItemNo(s);
+    if (!n) return;
+    const key = n.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    list.push(n);
+  };
+
+  const primary = parseScanAsItemNo(raw);
+  if (primary) add(primary);
+  add(raw);
+  for (const part of raw.split(/[\s|;,\t\/]+/)) add(part);
+
+  const codeLike =
+    /\b[A-Za-z]{2,}[\w.-]*-[A-Za-z0-9][\w.-]*\b|\b[A-Za-z]\d{2,}[A-Za-z0-9.-]*\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = codeLike.exec(raw))) add(m[0]);
+
+  return list;
 }
 
 function itemNoMatchesTask(taskItem: string, scanned: string): boolean {
@@ -191,8 +231,13 @@ function TaskConfirmModal({
         <p className="mt-1 font-bold text-slate-700">
           單號：{normItemNo(t.order_no)}
         </p>
-        {t.item_name ? (
-          <p className="mt-1 text-lg font-bold text-slate-800">{t.item_name}</p>
+        {formatItemNameSpecLine(t) ? (
+          <p className="mt-1 text-lg font-bold text-slate-800">
+            {formatItemNameSpecLine(t)}
+          </p>
+        ) : null}
+        {t.unit ? (
+          <p className="mt-1 text-sm font-black text-slate-600">單位：{t.unit}</p>
         ) : null}
 
         {mode === "stocktake" && (
@@ -217,9 +262,16 @@ function TaskConfirmModal({
         )}
 
         {(mode === "outbound" || mode === "inbound") && (
-          <p className="mt-3 text-base font-black text-slate-800">
-            尚可作業數：<span className="text-blue-900">{pendingNeed}</span>
-          </p>
+          <div className="mt-3 space-y-1 text-base font-black text-slate-800">
+            <p>
+              目標數量：<span className="text-blue-900">{t.required_qty}</span>
+              {t.unit ? ` ${t.unit}` : ""}
+            </p>
+            <p>
+              待作業 = 目標數 - 已完成數：<span className="text-blue-900">{pendingNeed}</span>
+              {t.unit ? ` ${t.unit}` : ""}
+            </p>
+          </div>
         )}
 
         {taskModalErr && (
@@ -347,19 +399,28 @@ function SummaryModal({
                     key={`u-${x.id}`}
                     className="rounded-xl border bg-slate-50 p-3 text-sm font-bold"
                   >
-                    {normItemNo(x.order_no)} · {x.item_no}：
-                    <span className="font-black text-red-800">
-                      應作業 {x.required_qty}／已掃 0
-                    </span>
-                    <span className="ml-1 text-xs font-black text-slate-600">
-                      （
-                      {rowOperationMode(x) === "inbound"
-                        ? "入庫 IN"
-                        : rowOperationMode(x) === "stocktake"
-                          ? "盤點 PK"
-                          : "檢貨 AB"}
-                      ）
-                    </span>
+                    <div>
+                      {normItemNo(x.order_no)} · {x.item_no}
+                      {formatItemNameSpecLine(x) ? (
+                        <span className="mt-1 block text-base font-black text-slate-800">
+                          {formatItemNameSpecLine(x)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1">
+                      <span className="font-black text-red-800">
+                        應作業 {x.required_qty}／已掃 0
+                      </span>
+                      <span className="ml-1 text-xs font-black text-slate-600">
+                        （
+                        {rowOperationMode(x) === "inbound"
+                          ? "入庫 IN"
+                          : rowOperationMode(x) === "stocktake"
+                            ? "盤點 PK"
+                            : "檢貨 AB"}
+                        ）
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -381,12 +442,21 @@ function SummaryModal({
                     key={`d-${x.id}`}
                     className="rounded-xl border-2 border-red-200 bg-red-50 p-3 text-sm font-bold text-red-950"
                   >
-                    {normItemNo(x.order_no)} · {x.item_no}：
-                    <span className="font-black text-red-700">
-                      已掃 {x.picked_qty}／應 {x.required_qty}（差異{" "}
-                      {delta > 0 ? "+" : ""}
-                      {delta}）
-                    </span>
+                    <div>
+                      {normItemNo(x.order_no)} · {x.item_no}
+                      {formatItemNameSpecLine(x) ? (
+                        <span className="mt-1 block text-base font-black text-slate-900">
+                          {formatItemNameSpecLine(x)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1">
+                      <span className="font-black text-red-700">
+                        已掃 {x.picked_qty}／應 {x.required_qty}（差異{" "}
+                        {delta > 0 ? "+" : ""}
+                        {delta}）
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -565,13 +635,12 @@ function OperatePageContent() {
       taskIdFromQuery &&
       isTaskUuid(taskIdFromQuery)
     ) {
-      const { data: probe, error: pe } = await supabase
+      let probeQ = supabase
         .from("picking_tasks")
         .select("order_no")
         .eq("id", taskIdFromQuery)
-        .eq("tenant_id", getEffectiveTenantSlug())
-        .eq("assigned_operator", sessionName)
-        .maybeSingle();
+        .eq("assigned_operator", sessionName);
+      const { data: probe, error: pe } = await probeQ.maybeSingle();
       if (pe) {
         setStatusMsg(pe.message);
         return false;
@@ -596,16 +665,14 @@ function OperatePageContent() {
     }
 
     const baseSel =
-      "id,order_no,item_no,item_name,required_qty,is_blind_count,status,assigned_operator,started_at,operation_type,picking_logs(actual_qty)";
+      "id,order_no,item_no:item_code,item_code,item_name,spec,unit,required_qty:target_qty,picked_qty,is_blind_count,status,assigned_operator,started_at,operation_type";
     const fallbackSel =
-      "id,order_no,item_no,item_name,required_qty,status,assigned_operator,started_at,operation_type,picking_logs(actual_qty)";
+      "id,order_no,item_no:item_code,item_code,item_name,unit,required_qty:target_qty,picked_qty,status,assigned_operator,started_at,operation_type";
 
-    const tz = getEffectiveTenantSlug();
     const qb = (sel: string, restrictOrderNo: string | null) => {
       let q = supabase
         .from("picking_tasks")
         .select(sel)
-        .eq("tenant_id", tz)
         .in("status", ["pending", "in_progress", "completed"])
         .eq("assigned_operator", sessionName)
         .order("created_at", { ascending: false })
@@ -617,7 +684,12 @@ function OperatePageContent() {
     };
 
     let { data, error } = await qb(baseSel, filterOrderNo);
-    if (error?.message.includes("is_blind_count")) {
+    if (
+      error?.message.includes("is_blind_count") ||
+      error?.message.includes("item_code") ||
+      error?.message.includes("unit") ||
+      error?.message.includes("spec")
+    ) {
       ({ data, error } = await qb(fallbackSel, filterOrderNo));
     }
     if (error) {
@@ -628,7 +700,10 @@ function OperatePageContent() {
     let rows = (data ?? []) as unknown as Array<
       Omit<PickingTaskRow, "picked_qty"> & {
         item_name?: string | null;
-        picking_logs?: Array<{ actual_qty?: number | null }>;
+        unit?: string | null;
+        spec?: string | null;
+        item_code?: string | null;
+        picked_qty?: number | null;
         is_blind_count?: boolean | null;
       }
     >;
@@ -641,7 +716,12 @@ function OperatePageContent() {
 
     if (filterOrderNo && rows.length === 0 && filterOrderKey) {
       ({ data, error } = await qb(baseSel, null));
-      if (error?.message.includes("is_blind_count")) {
+      if (
+        error?.message.includes("is_blind_count") ||
+        error?.message.includes("item_code") ||
+        error?.message.includes("unit") ||
+        error?.message.includes("spec")
+      ) {
         ({ data, error } = await qb(fallbackSel, null));
       }
       if (error) {
@@ -654,15 +734,38 @@ function OperatePageContent() {
       );
     }
 
+    const taskIds = rows.map((t) => String(t.id)).filter(Boolean);
+    const pickedByTask = new Map<string, number>();
+    if (taskIds.length > 0) {
+      let lq = supabase
+        .from("picking_logs")
+        .select("task_id,actual_qty")
+        .in("task_id", taskIds);
+      const { data: logs, error: lErr } = await lq;
+      if (lErr) {
+        setStatusMsg(lErr.message);
+        return false;
+      }
+      for (const lg of logs ?? []) {
+        const k = String((lg as { task_id?: string | null }).task_id ?? "");
+        if (!k) continue;
+        const v = Number((lg as { actual_qty?: number | null }).actual_qty) || 0;
+        pickedByTask.set(k, (pickedByTask.get(k) ?? 0) + v);
+      }
+    }
+
     setTasks(
       rows.map((t) => ({
         ...t,
         item_name: normItemNo(String(t.item_name ?? "")).trim() || undefined,
+        unit: normItemNo(String(t.unit ?? "")).trim() || undefined,
+        spec: normItemNo(String(t.spec ?? "")).trim() || undefined,
+        item_code: normItemNo(String(t.item_code ?? "")).trim() || undefined,
         is_blind_count:
           typeof t.is_blind_count === "boolean" ? t.is_blind_count : undefined,
-        picked_qty: (t.picking_logs ?? []).reduce(
-          (s, lg) => s + (Number(lg.actual_qty) || 0),
-          0,
+        picked_qty: Math.max(
+          Number(t.picked_qty ?? 0) || 0,
+          pickedByTask.get(String(t.id)) ?? 0,
         ),
       })),
     );
@@ -718,17 +821,10 @@ function OperatePageContent() {
 
   const runRetentionCleanup = useCallback(async () => {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const tz = getEffectiveTenantSlug();
-    await supabase
-      .from("picking_logs")
-      .delete()
-      .eq("tenant_id", tz)
-      .lt("created_at", cutoff);
-    await supabase
-      .from("picking_tasks")
-      .delete()
-      .eq("tenant_id", tz)
-      .lt("created_at", cutoff);
+    const qLog = supabase.from("picking_logs").delete().lt("created_at", cutoff);
+    await qLog;
+    const qTask = supabase.from("picking_tasks").delete().lt("created_at", cutoff);
+    await qTask;
   }, [supabase]);
 
   useEffect(() => {
@@ -881,7 +977,6 @@ function OperatePageContent() {
     variance_note: string | null;
   }) => {
     const row: Record<string, unknown> = {
-      tenant_id: getEffectiveTenantSlug(),
       order_no: String(payload.order_no ?? "").trim() || "UNKNOWN",
       item_no: String(payload.item_no ?? "").trim() || "UNKNOWN",
       actual_qty: Math.min(
@@ -935,12 +1030,12 @@ function OperatePageContent() {
     }
 
     if (error) {
-      const { error: e2 } = await ins({
-        tenant_id: getEffectiveTenantSlug(),
+      const minimal: Record<string, unknown> = {
         order_no: row.order_no,
         item_no: row.item_no,
         actual_qty: row.actual_qty,
-      });
+      };
+      const { error: e2 } = await ins(minimal);
       return { error: e2 };
     }
 
@@ -995,10 +1090,8 @@ function OperatePageContent() {
       mode === "stocktake"
         ? `溢損量:${diff > 0 ? "+" : ""}${diff}`
         : diff === 0
-          ? fc
-            ? "提前結項"
-            : null
-          : `損益:${diff > 0 ? "+" : ""}${diff}${fc ? "；提前結項" : ""}`;
+          ? null
+          : `損益:${diff > 0 ? "+" : ""}${diff}${fc ? "；人工確認缺量" : ""}`;
     const { error: logErr } = await insertPickingLogCompat({
       task_id: task.id,
       order_no: task.order_no,
@@ -1016,22 +1109,17 @@ function OperatePageContent() {
       return false;
     }
     const pickedAfter = mode === "stocktake" ? qty : task.picked_qty + qty;
-    const done =
-      mode === "stocktake"
-        ? pickedAfter >= task.required_qty
-        : fc || pickedAfter >= task.required_qty;
+    const done = pickedAfter >= task.required_qty;
     const updates: Record<string, unknown> = {
+      picked_qty: pickedAfter,
       status: done ? "completed" : "in_progress",
       ended_at: done ? new Date().toISOString() : null,
     };
     if (!task.started_at && task.picked_qty === 0) {
       updates.started_at = new Date().toISOString();
     }
-    const { error: upErr } = await supabase
-      .from("picking_tasks")
-      .update(updates)
-      .eq("tenant_id", getEffectiveTenantSlug())
-      .eq("id", task.id);
+    const upq = supabase.from("picking_tasks").update(updates).eq("id", task.id);
+    const { error: upErr } = await upq;
     if (upErr) {
       const m = `${upErr.message}（派單狀態更新失敗）`;
       setStatusMsg(m);
@@ -1044,12 +1132,13 @@ function OperatePageContent() {
     setStatusMsg(
       mode === "stocktake"
         ? `已更新 ${task.item_no} 盤點數`
-        : `已更新 ${task.item_no} 領料數 ${qty}`,
+        : mode === "inbound"
+          ? `已更新 ${task.item_no} 入庫數 ${qty}`
+          : `已更新 ${task.item_no} 領料數 ${qty}`,
     );
     const lm = rowOperationMode(task);
     if (lm === "inbound" || lm === "outbound") {
       fireWarehouseLedgerPostMove({
-        tenant_id: getEffectiveTenantSlug(),
         item_no: normItemNo(task.item_no),
         direction: lm,
         qty: Math.floor(qty),
@@ -1060,6 +1149,7 @@ function OperatePageContent() {
         scan_payload: scanUid,
         seed_item_name:
           typeof task.item_name === "string" ? task.item_name : "",
+        seed_spec: typeof task.spec === "string" ? task.spec : "",
       });
     }
     // 不可 await loadTasks：彙總 logs 很慢時會阻塞關閉 Modal，使用者無法接續掃描。
@@ -1085,32 +1175,47 @@ function OperatePageContent() {
 
   /** 將解析出的料號套入當前單據；nfcPayload 為寫入日誌的標籤內容截段（非 UID 清冊） */
   const applyParsedItemNo = async (
-    matchedItemRaw: string,
+    rawScan: string,
     nfcPayload: string,
   ) => {
-    const matchedItemNo = normItemNo(matchedItemRaw);
+    const tokens = collectItemCodeCandidates(rawScan);
     const forLog =
       (nfcPayload || "").trim().slice(0, 200) ||
-      matchedItemNo ||
+      tokens[0] ||
       "BLANK";
 
     if (isManual) {
-      setManualItemNo(matchedItemNo || "UNKNOWN");
+      const first = tokens[0] ?? "";
+      setManualItemNo(first || "UNKNOWN");
       setMatch("ok");
-      setStatusMsg(`已取得料號：${matchedItemNo || "UNKNOWN"}`);
+      setStatusMsg(`已取得料號：${first || "UNKNOWN"}`);
       vibrate(80);
       playSuccessBeep();
       return;
     }
 
-    const candidates = selectedOrderTasks.filter((t) =>
-      itemNoMatchesTask(t.item_no, matchedItemNo),
-    );
-    const pending = candidates.filter((t) => t.picked_qty < t.required_qty);
-    const hit = pending[0] ?? candidates[0];
+    let hit: PickingTaskRow | undefined;
+    let matchedToken = "";
+    for (const token of tokens) {
+      const candidates = selectedOrderTasks.filter(
+        (t) =>
+          itemNoMatchesTask(t.item_no, token) ||
+          itemNoMatchesTask(t.item_code ?? "", token),
+      );
+      const pending = candidates.filter((t) => t.picked_qty < t.required_qty);
+      const h = pending[0] ?? candidates[0];
+      if (h) {
+        hit = h;
+        matchedToken = token;
+        break;
+      }
+    }
+
     if (!hit) {
       setMatch("bad");
-      setStatusMsg(`料號 ${matchedItemNo || "?"} 不在單號 ${selectedOrderDisplayLabel || selectedOrderKey} 清單內`);
+      setStatusMsg(
+        `料號（${tokens[0] ?? "?"}）不在單號 ${selectedOrderDisplayLabel || selectedOrderKey} 清單內`,
+      );
       playErrorBeep();
       vibrate(250);
       speakOperateSuccess("此料號不屬於目前單據");
@@ -1118,7 +1223,7 @@ function OperatePageContent() {
         forLog,
         "item_no_mismatch",
         selectedOrderDisplayLabel || selectedOrderKey,
-        matchedItemNo || "?",
+        tokens[0] ?? "?",
       );
       return;
     }
@@ -1126,7 +1231,7 @@ function OperatePageContent() {
     setActiveTask({
       task: hit,
       nfcPayload: forLog,
-      matchedItemDisplay: matchedItemNo || hit.item_no,
+      matchedItemDisplay: matchedToken || hit.item_no,
     });
     openTaskConfirmModal(hit);
     setStatusMsg(null);
@@ -1186,10 +1291,6 @@ function OperatePageContent() {
           window.location.origin,
         );
         onHandUrl.searchParams.set("item_no", normItemNo(hit.item_no));
-        onHandUrl.searchParams.set(
-          "tenant",
-          getEffectiveTenantSlug(),
-        );
         const r = await fetch(onHandUrl.toString());
         const j = (await r.json()) as {
           found?: boolean;
@@ -1197,46 +1298,41 @@ function OperatePageContent() {
           error?: string;
         };
         if (!r.ok) {
-          setTaskModalErr(j.error || "讀取總帳失敗");
-          playErrorBeep();
-          vibrate(220);
-          return;
-        }
-        const found = Boolean(j.found);
-        const oh = Number(j.on_hand) || 0;
-        if (!found) {
-          setTaskModalErr(
-            "總帳無此料號，請先於「倉儲總帳」匯入或建檔後再出庫掃描。",
+          // 與入庫/盤點一致：總帳檢核失敗不阻斷現場作業，改為警示後放行。
+          setStatusMsg(
+            `總帳檢核暫時不可用，已改為不中斷模式：${j.error || "讀取總帳失敗"}`,
           );
-          playErrorBeep();
-          vibrate(220);
-          return;
-        }
-        if (qty > oh) {
-          const supervisor =
-            sessionRole === "warehouse_admin" ||
-            sessionRole === "system_admin";
-          const hint = `總帳庫存不足，請檢查資料正確性。\n目前結存：${oh}，本次出庫：${qty}。`;
-          if (!supervisor) {
-            setDangerToast(null);
-            setTaskModalErr(hint);
-            playErrorBeep();
-            vibrate([100, 50, 100, 50, 240]);
-            return;
+          setTaskModalErr(null);
+        } else {
+          const found = Boolean(j.found);
+          const oh = Number(j.on_hand) || 0;
+          if (!found) {
+            setStatusMsg("總帳尚無此料號，已改為不中斷模式，請後續補建主檔。");
+          } else if (qty > oh) {
+            const supervisor =
+              sessionRole === "warehouse_admin" ||
+              sessionRole === "system_admin";
+            const hint = `總帳庫存不足，請檢查資料正確性。\n目前結存：${oh}，本次出庫：${qty}。`;
+            if (!supervisor) {
+              setDangerToast(null);
+              setTaskModalErr(hint);
+              playErrorBeep();
+              vibrate([100, 50, 100, 50, 240]);
+              return;
+            }
+            if (
+              !window.confirm(
+                `${hint}\n\n您為倉儲主管身分，仍可強制執行。\n確定繼續？`,
+              )
+            ) {
+              return;
+            }
+            ledgerShortageForced = true;
           }
-          if (
-            !window.confirm(
-              `${hint}\n\n您為倉儲主管身分，仍可強制執行。\n確定繼續？`,
-            )
-          ) {
-            return;
-          }
-          ledgerShortageForced = true;
         }
       } catch {
-        setTaskModalErr("無法連線至總帳服務，請檢查網路後重試。");
-        playErrorBeep();
-        return;
+        setStatusMsg("無法連線至總帳服務，已改為不中斷模式。");
+        setTaskModalErr(null);
       }
     }
 
@@ -1307,8 +1403,8 @@ function OperatePageContent() {
       setStatusMsg("單號尚未就緒，請稍候載入完成；若無法載入請回首頁重選。");
       return;
     }
-    const itemNo = parseScanAsItemNo(scanLabelOut);
-    if (!itemNo) {
+    const tokens = collectItemCodeCandidates(scanLabelOut);
+    if (tokens.length === 0) {
       setMatch("bad");
       playErrorBeep();
       vibrate(260);
@@ -1321,8 +1417,8 @@ function OperatePageContent() {
       );
       return;
     }
-    const forLog = normItemNo(scanLabelOut).slice(0, 200) || itemNo;
-    await applyParsedItemNo(itemNo, forLog);
+    const forLog = normItemNo(scanLabelOut).slice(0, 200) || tokens[0];
+    await applyParsedItemNo(scanLabelOut, forLog);
   };
 
   useEffect(() => {
@@ -1451,7 +1547,7 @@ function OperatePageContent() {
           </p>
         </div>
         <Link
-          href="/"
+          href={withTenantParam("/")}
           prefetch
           className="flex min-h-[48px] shrink-0 flex-col items-end justify-center rounded-xl border-4 border-blue-800 bg-blue-50 px-3 py-1.5 text-right text-sm font-black text-blue-950 shadow-sm active:scale-[0.99]"
         >
@@ -1499,7 +1595,7 @@ function OperatePageContent() {
             完成本作業後請按右上角「回首頁」換下一張單。
           </p>
           <Link
-            href="/"
+            href={withTenantParam("/")}
             prefetch
             className="mt-5 inline-flex min-h-[56px] w-full items-center justify-center rounded-xl bg-blue-800 text-xl font-black text-white shadow-lg active:scale-[0.99]"
           >

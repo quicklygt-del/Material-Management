@@ -7,8 +7,12 @@ import { useRouter } from "next/navigation";
 import { exitToLoginHome, getSessionUser } from "@/lib/auth";
 import { LabelTemplateManagerSection } from "@/components/admin/LabelTemplateManagerSection";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
-import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
+import {
+  getDefaultLabelPrefix,
+  normalizeLabelPrefix,
+} from "@/lib/labelEncoding";
 import { APP_VERSION } from "@/lib/version";
+import { withTenantParam } from "@/lib/tenantNav";
 
 type ZoneRow = {
   id: string;
@@ -24,7 +28,11 @@ export default function OtherOperationsAdminPage() {
   const router = useRouter();
   const session = useMemo(() => getSessionUser(), []);
 
-  const companyId = useMemo(() => getDefaultLabelPrefix(), []);
+  /** 與 app_users.company_id／首頁 tenant 一致（system_admin 登入後寫入 tenant_slug） */
+  const companyId = useMemo(() => {
+    const slug = session?.tenant_slug?.trim();
+    return slug ? normalizeLabelPrefix(slug) : getDefaultLabelPrefix();
+  }, [session?.tenant_slug]);
 
   const [zones, setZones] = useState<ZoneRow[]>([]);
   const [busy, setBusy] = useState(false);
@@ -44,7 +52,7 @@ export default function OtherOperationsAdminPage() {
 
   useEffect(() => {
     if (session?.role !== "system_admin") {
-      router.replace("/");
+      router.replace(withTenantParam("/"));
     }
   }, [router, session?.role]);
 

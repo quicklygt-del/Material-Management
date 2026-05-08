@@ -5,7 +5,7 @@ export const UNIT_JWT_COOKIE = "pick_unit_jwt";
 export function getUnitJwtSecretKey(): Uint8Array {
   const raw =
     process.env.PICK_UNIT_JWT_SECRET ||
-    `${process.env.NEXT_PUBLIC_LABEL_PREFIX || "WMS"}-pick-unit-jwt-dev`;
+    `${process.env.NEXT_PUBLIC_LABEL_PREFIX || "CARB"}-pick-unit-jwt-dev`;
   const doubled = raw.length < 32 ? `${raw}${raw}` : raw;
   return new TextEncoder().encode(doubled.slice(0, 64));
 }

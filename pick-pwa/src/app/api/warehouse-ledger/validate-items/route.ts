@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
 import { normLedgerItemNo } from "@/lib/warehouseLedger";
 import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import { assertTenantWarehouseLedgerAllowed } from "@/lib/warehouseLedgerTenantGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +21,6 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenantId =
-    normalizeLabelPrefix(String(b.tenant_id ?? getDefaultLabelPrefix())) ||
-    getDefaultLabelPrefix();
-
-  const denied = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
-  if (denied) return denied;
 
   const rawArr = Array.isArray(b.item_nos) ? b.item_nos : [];
   const itemNos = Array.from(
@@ -57,7 +46,6 @@ export async function POST(req: Request) {
     const { data: hits, error } = await admin
       .from("warehouse_ledger_stock")
       .select("item_no")
-      .eq("tenant_id", tenantId)
       .in("item_no", slice);
 
     if (error) {
@@ -71,6 +59,5 @@ export async function POST(req: Request) {
     ok: missing.length === 0,
     missing,
     checked: itemNos.length,
-    tenant_id: tenantId,
   });
 }

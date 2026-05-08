@@ -9,6 +9,10 @@ import {
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 import { signUnitJwt, UNIT_JWT_COOKIE } from "@/lib/unitPortalJwt";
+import {
+  getStorageZonesScopeColumn,
+  zoneRowScopeValue,
+} from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -35,12 +39,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "請輸入單位帳號與密碼" }, { status: 400 });
   }
 
+  const szCol = getStorageZonesScopeColumn();
   const { data: row, error } = await admin
     .from("storage_zones")
     .select(
-      "id,name,slug,tenant_id,portal_login,portal_password",
+      `id,name,slug,${szCol},portal_login,portal_password`,
     )
-    .eq("tenant_id", tenant_id)
+    .eq(szCol, tenant_id)
     .eq("portal_login", portal_login)
     .maybeSingle();
 
@@ -62,7 +67,11 @@ export async function POST(req: Request) {
     String(row.id),
     {
       slug,
-      tenant: normalizeLabelPrefix(String(row.tenant_id)),
+      tenant: normalizeLabelPrefix(
+        zoneRowScopeValue(
+          row as { tenant_id?: unknown; company_id?: unknown },
+        ),
+      ),
       name: String(row.name ?? "").trim() || "單位",
     },
     COOKIE_MAX_AGE_SEC,

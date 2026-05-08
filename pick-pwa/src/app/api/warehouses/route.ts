@@ -9,6 +9,14 @@ import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
+import {
+  getStorageZonesScopeColumn,
+  storageZonesSelectFull,
+  storageZonesSelectIdScope,
+  storageZonesSelectNoLabelTemplate,
+  storageZonesSelectPatch,
+  zoneRowScopeValue,
+} from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +53,11 @@ async function slugIsFree(
   tenant_id: string,
   candidate: string,
 ): Promise<boolean> {
+  const scopeCol = getStorageZonesScopeColumn();
   const { data, error } = await admin
     .from("storage_zones")
     .select("id")
-    .eq("tenant_id", tenant_id)
+    .eq(scopeCol, tenant_id)
     .eq("slug", candidate)
     .limit(1);
   if (error) return false;
@@ -97,7 +106,8 @@ function normalizeDbError(insertErr: {
     if (
       raw.includes("slug") ||
       raw.includes("tenant_slug") ||
-      raw.includes("(tenant_id, slug)")
+      raw.includes("(tenant_id, slug)") ||
+      raw.includes("(company_id, slug)")
     ) {
       return "路徑 slug 與現有單位衝突，請在表單手填不重複英數 slug 或稍後再試。";
     }
@@ -118,12 +128,11 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const fromQuery = normalizeLabelPrefix(url.searchParams.get("tenant") ?? "");
   const tenant_id = fromQuery || getDefaultLabelPrefix();
+  const scopeCol = getStorageZonesScopeColumn();
   const { data, error } = await admin
     .from("storage_zones")
-    .select(
-      "id,tenant_id,name,created_at,slug,portal_login,invite_expires_at,label_template_id",
-    )
-    .eq("tenant_id", tenant_id)
+    .select(storageZonesSelectFull())
+    .eq(scopeCol, tenant_id)
     .order("created_at", { ascending: true });
   if (error) {
     const em = error.message ?? "";
@@ -131,22 +140,27 @@ export async function GET(req: Request) {
       /label_template_id|column|42703/i.test(em)
         ? admin
             .from("storage_zones")
-            .select(
-              "id,tenant_id,name,created_at,slug,portal_login,invite_expires_at",
-            )
-            .eq("tenant_id", tenant_id)
+            .select(storageZonesSelectNoLabelTemplate())
+            .eq(scopeCol, tenant_id)
             .order("created_at", { ascending: true })
         : null;
     if (fallback) {
       const fr = await fallback;
       if (!fr.error) {
-        const zones = (fr.data ?? []).map((z) => ({
-          ...z,
-          label_template_id: null as string | null,
-          name: String(z.name ?? "").trim() || "未命名",
-          slug: String(z.slug ?? "").trim(),
-          portal_login: String(z.portal_login ?? "").trim(),
-        }));
+        const zones = (fr.data ?? []).map((z) => {
+          const row = z as unknown as Record<string, unknown>;
+          const scopeVal = zoneRowScopeValue(
+            row as { tenant_id?: unknown; company_id?: unknown },
+          );
+          return {
+            ...row,
+            tenant_id: scopeVal,
+            label_template_id: null as string | null,
+            name: String(row.name ?? "").trim() || "未命名",
+            slug: String(row.slug ?? "").trim(),
+            portal_login: String(row.portal_login ?? "").trim(),
+          };
+        });
         return NextResponse.json({
           storage_zones: zones,
           warehouses: zones,
@@ -155,14 +169,21 @@ export async function GET(req: Request) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  const zones = (data ?? []).map((z) => ({
-    ...z,
-    name: String(z.name ?? "").trim() || "未命名",
-    slug: String(z.slug ?? "").trim(),
-    portal_login: String(z.portal_login ?? "").trim(),
-    label_template_id:
-      (z as { label_template_id?: string | null }).label_template_id ?? null,
-  }));
+  const zones = (data ?? []).map((z) => {
+    const row = z as unknown as Record<string, unknown>;
+    const scopeVal = zoneRowScopeValue(
+      row as { tenant_id?: unknown; company_id?: unknown },
+    );
+    return {
+      ...row,
+      tenant_id: scopeVal,
+      name: String(row.name ?? "").trim() || "未命名",
+      slug: String(row.slug ?? "").trim(),
+      portal_login: String(row.portal_login ?? "").trim(),
+      label_template_id:
+        (row.label_template_id as string | null | undefined) ?? null,
+    };
+  });
   return NextResponse.json({
     storage_zones: zones,
     warehouses: zones,
@@ -187,10 +208,11 @@ export async function POST(req: Request) {
   if (!name) {
     return NextResponse.json({ error: "缺少單位名稱" }, { status: 400 });
   }
+  const scopeCol = getStorageZonesScopeColumn();
   const { data: tenantZones, error: cErr } = await admin
     .from("storage_zones")
     .select("id")
-    .eq("tenant_id", tenant_id);
+    .eq(scopeCol, tenant_id);
   if (cErr) {
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
@@ -246,23 +268,23 @@ export async function POST(req: Request) {
         ? slugAlloc
         : `z-${randomBytes(10).toString("hex")}`.slice(0, 56);
 
+    const insertRow: Record<string, unknown> = {
+      name,
+      slug: trySlug,
+      portal_login: portal_login.slice(0, 64),
+      portal_password: portal_password.trim(),
+      ...(label_template_id ? { label_template_id } : {}),
+    };
+    insertRow[scopeCol] = tenant_id;
+
     const ins = await admin
       .from("storage_zones")
-      .insert({
-        tenant_id,
-        name,
-        slug: trySlug,
-        portal_login: portal_login.slice(0, 64),
-        portal_password: portal_password.trim(),
-        ...(label_template_id ? { label_template_id } : {}),
-      })
-      .select(
-        "id,tenant_id,name,created_at,slug,portal_login,invite_expires_at,label_template_id",
-      )
+      .insert(insertRow)
+      .select(storageZonesSelectFull())
       .single();
 
     if (!ins.error && ins.data) {
-      data = ins.data as Record<string, unknown>;
+      data = ins.data as unknown as Record<string, unknown>;
       break;
     }
 
@@ -277,6 +299,7 @@ export async function POST(req: Request) {
       isDup &&
       (raw.includes("slug") ||
         raw.includes("(tenant_id, slug)") ||
+        raw.includes("(company_id, slug)") ||
         raw.includes("tenant_slug"));
 
     if (slugFight) {
@@ -294,7 +317,15 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ warehouse: data });
+  const w = data as unknown as Record<string, unknown>;
+  return NextResponse.json({
+    warehouse: {
+      ...w,
+      tenant_id: zoneRowScopeValue(
+        w as { tenant_id?: unknown; company_id?: unknown },
+      ),
+    },
+  });
 }
 
 export async function PATCH(req: Request) {
@@ -317,15 +348,22 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 });
   }
 
+  const scopeColPatch = getStorageZonesScopeColumn();
   const { data: existing, error: exErr } = await admin
     .from("storage_zones")
-    .select("id,tenant_id,name,slug,portal_login,label_template_id")
+    .select(storageZonesSelectPatch())
     .eq("id", id)
     .maybeSingle();
   if (exErr || !existing) {
     return NextResponse.json({ error: "找不到單位" }, { status: 404 });
   }
-  if (normalizeLabelPrefix(String(existing.tenant_id)) !== tenant_q) {
+  if (
+    normalizeLabelPrefix(
+      zoneRowScopeValue(
+        existing as { tenant_id?: unknown; company_id?: unknown },
+      ),
+    ) !== tenant_q
+  ) {
     return NextResponse.json({ error: "租戶不符" }, { status: 403 });
   }
 
@@ -345,11 +383,11 @@ export async function PATCH(req: Request) {
     if (!want) {
       return NextResponse.json({ error: "slug 無效" }, { status: 400 });
     }
-    if (want !== String(existing.slug ?? "").trim()) {
+    if (want !== String((existing as unknown as Record<string, unknown>).slug ?? "").trim()) {
       const { count } = await admin
         .from("storage_zones")
         .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenant_q)
+        .eq(scopeColPatch, tenant_q)
         .eq("slug", want)
         .neq("id", id);
       if ((count ?? 0) > 0) {
@@ -402,16 +440,20 @@ export async function PATCH(req: Request) {
     .from("storage_zones")
     .update(patch)
     .eq("id", id)
-    .select(
-      "id,tenant_id,name,created_at,slug,portal_login,invite_expires_at,label_template_id",
-    )
+    .select(storageZonesSelectFull())
     .single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const w = data as unknown as Record<string, unknown>;
   return NextResponse.json({
-    warehouse: data,
+    warehouse: {
+      ...w,
+      tenant_id: zoneRowScopeValue(
+        w as { tenant_id?: unknown; company_id?: unknown },
+      ),
+    },
     ...(newInviteToken ? { invite_token: newInviteToken } : {}),
   });
 }
@@ -430,15 +472,20 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 });
   }
 
+  const scopeDel = getStorageZonesScopeColumn();
   const { data: zone, error: zErr } = await admin
     .from("storage_zones")
-    .select("id,tenant_id")
+    .select(storageZonesSelectIdScope())
     .eq("id", id)
     .maybeSingle();
   if (zErr || !zone) {
     return NextResponse.json({ error: "找不到管理單位" }, { status: 404 });
   }
-  if (normalizeLabelPrefix(String(zone.tenant_id)) !== tenant_id) {
+  if (
+    normalizeLabelPrefix(
+      zoneRowScopeValue(zone as { tenant_id?: unknown; company_id?: unknown }),
+    ) !== tenant_id
+  ) {
     return NextResponse.json({ error: "無權限刪除此單位" }, { status: 403 });
   }
 

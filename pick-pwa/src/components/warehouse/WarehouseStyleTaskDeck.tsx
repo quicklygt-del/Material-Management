@@ -10,6 +10,7 @@ import {
 } from "@/lib/warehouseTasks";
 import { getEffectiveTenantSlug } from "@/lib/tenantContext";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { withTenantParam } from "@/lib/tenantNav";
 
 export function WarehouseStyleTaskDeck({
   assignedOperator,
@@ -38,9 +39,10 @@ export function WarehouseStyleTaskDeck({
     isValidating: myTasksRefreshing,
     mutate: reloadMyTasks,
   } = useSWR(op ? `my-tasks:${op}:${tenant}` : null, fetchMyTasks, {
-    revalidateOnFocus: false,
+    revalidateOnFocus: true,
     keepPreviousData: true,
-    dedupingInterval: 20_000,
+    dedupingInterval: 10_000,
+    refreshInterval: 45_000,
   });
 
   if (!op) return null;
@@ -50,7 +52,7 @@ export function WarehouseStyleTaskDeck({
       <section className="rounded-2xl bg-white p-5 shadow">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-2xl font-black">
-            我的今日任務{titleSuffix ? ` · ${titleSuffix}` : ""}
+            我的派工任務{titleSuffix ? ` · ${titleSuffix}` : ""}
           </h2>
           <button
             type="button"
@@ -81,7 +83,7 @@ export function WarehouseStyleTaskDeck({
                   orderKey: t.groupKey,
                   orderNo: t.order_no,
                 });
-                router.push(`/operate?${q.toString()}`);
+                router.push(withTenantParam(`/operate?${q.toString()}`));
               }}
               className="w-full rounded-xl border border-slate-300 bg-blue-50 p-3 text-left font-black"
             >
@@ -105,14 +107,14 @@ export function WarehouseStyleTaskDeck({
           )}
           {!myTasksLoading && myTasks.length === 0 && !myTasksErr && (
             <p className="font-bold text-slate-500">
-              今日已指派任務顯示於此（僅顯示派單給您帳號之單據）
+              已派給您且未結案之單據顯示於此（與指揮塔派單一致）
             </p>
           )}
         </div>
         {!compactForUnit ? (
           <button
             type="button"
-            onClick={() => router.push("/operate?op=manual")}
+            onClick={() => router.push(withTenantParam("/operate?op=manual"))}
             className="mt-4 h-[58px] w-full rounded-xl bg-blue-700 text-xl font-black text-white"
           >
             ＋自主發起掃描

@@ -8,6 +8,10 @@ import {
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 import { getPreviousLabelBalance } from "@/lib/universalLedgerBalance";
+import {
+  storageZonesSelectIdScope,
+  zoneRowScopeValue,
+} from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -91,13 +95,17 @@ export async function POST(req: Request) {
 
   const { data: zone, error: zErr } = await admin
     .from("storage_zones")
-    .select("id,tenant_id")
+    .select(storageZonesSelectIdScope())
     .eq("id", unit_id)
     .maybeSingle();
   if (zErr || !zone) {
     return NextResponse.json({ error: "管理單位不存在" }, { status: 400 });
   }
-  if (normalizeLabelPrefix(String(zone.tenant_id)) !== tenant_id) {
+  if (
+    normalizeLabelPrefix(
+      zoneRowScopeValue(zone as { tenant_id?: unknown; company_id?: unknown }),
+    ) !== tenant_id
+  ) {
     return NextResponse.json({ error: "單位與公司識別不符" }, { status: 403 });
   }
 

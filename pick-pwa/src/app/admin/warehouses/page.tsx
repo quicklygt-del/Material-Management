@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
 import { canAccessWarehouseDashboard, getSessionUser } from "@/lib/auth";
+import { withTenantParam } from "@/lib/tenantNav";
 import { APP_VERSION } from "@/lib/version";
 
 const MAX_W = 5;
@@ -147,7 +148,7 @@ export default function AdminWarehousesPage() {
           <AppBrandHeader section="資產分頁設定" align="left" />
           <p className="mt-2 text-xs font-black text-blue-700">版本：{APP_VERSION}</p>
         </div>
-        <Link href="/admin" className="font-bold underline">
+        <Link href={withTenantParam("/admin")} className="font-bold underline">
           回管理後台
         </Link>
       </header>

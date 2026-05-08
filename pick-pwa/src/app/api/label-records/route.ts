@@ -8,6 +8,10 @@ import {
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 import { getPreviousLabelBalance } from "@/lib/universalLedgerBalance";
+import {
+  storageZonesSelectIdScope,
+  zoneRowScopeValue,
+} from "@/lib/storageZonesScope";
 
 function ledgerActionSummaryPrefix(action: string): string {
   switch (action) {
@@ -91,12 +95,16 @@ export async function POST(req: Request) {
   ) {
     const { data: zone } = await admin
       .from("storage_zones")
-      .select("id,tenant_id")
+      .select(storageZonesSelectIdScope())
       .eq("id", unitFromMeta)
       .maybeSingle();
     if (
       zone &&
-      normalizeLabelPrefix(String(zone.tenant_id)) === tenant_id
+      normalizeLabelPrefix(
+        zoneRowScopeValue(
+          zone as { tenant_id?: unknown; company_id?: unknown },
+        ),
+      ) === tenant_id
     ) {
       const ledger_action = String(
         meta.ledger_action ?? "inbound",

@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "領料檢貨 PWA",
     short_name: "檢貨",
-    description: "NFC 掃描比對領料單，掃錯即警示",
+    description: "AI 智能 QR 物料標籤與倉儲作業，掃碼比對單據",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

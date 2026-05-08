@@ -13,6 +13,12 @@ export type WarehouseTaskGroup = {
   representativeTaskId: string;
 };
 
+const taskCache = new Map<
+  string,
+  { at: number; data: WarehouseTaskGroup[] }
+>();
+const TASK_CACHE_TTL_MS = 2500;
+
 export function normalizePickingOpType(raw: unknown): WarehouseOpType {
   const s = String(raw ?? "").trim();
   if (s === "inbound" || s === "stocktake") return s;
@@ -28,44 +34,82 @@ export function opTypeShortLabel(op: WarehouseOpType): string {
 export async function fetchTodayTasksGrouped(
   supabase: SupabaseClient,
   assignedOperator: string,
-  tenantSlug: string,
+  _tenantSlug: string,
 ): Promise<WarehouseTaskGroup[]> {
   const name = assignedOperator.trim();
   if (!name) return [];
+  const cacheKey = name;
+  const hit = taskCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < TASK_CACHE_TTL_MS) {
+    return hit.data;
+  }
 
-  const now = new Date();
-  const start = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    0,
-    0,
-    0,
-  ).toISOString();
-  const end = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1,
-    0,
-    0,
-    0,
-  ).toISOString();
+  // 與指揮塔看板一致：依「指派對象＋未完成」列出，不要用 created_at 卡「今天」，
+  // 否則跨日／時區／舊單會出現管理端有單、倉管端空白。
+  const selFull =
+    "id,order_no,item_no:item_code,required_qty:target_qty,picked_qty,operation_type,status";
+  const selNoPicked =
+    "id,order_no,item_no:item_code,required_qty:target_qty,operation_type,status";
 
-  const tz = tenantSlug.trim();
-  const { data: tasks, error: tErr } = await supabase
+  let tq = supabase
     .from("picking_tasks")
-    .select(
-      "id,order_no,item_no,required_qty,operation_type,status,picking_logs(actual_qty)",
-    )
-    .eq("tenant_id", tz)
+    .select(selFull)
     .eq("assigned_operator", name)
-    .gte("created_at", start)
-    .lt("created_at", end)
     .in("status", ["pending", "in_progress"])
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(800);
+  let tasks: unknown[] | null = null;
+  let tErr = null as { message: string } | null;
+  {
+    const first = await tq;
+    tasks = first.data as unknown[] | null;
+    tErr = first.error;
+  }
+  if (
+    tErr &&
+    /picked_qty|column .* does not exist/i.test(String(tErr.message ?? ""))
+  ) {
+    const second = await supabase
+      .from("picking_tasks")
+      .select(selNoPicked)
+      .eq("assigned_operator", name)
+      .in("status", ["pending", "in_progress"])
+      .order("created_at", { ascending: false })
+      .limit(800);
+    tasks = second.data as unknown[] | null;
+    tErr = second.error;
+  }
 
+  type RawTask = {
+    id: string;
+    order_no: string;
+    item_no?: unknown;
+    required_qty?: unknown;
+    picked_qty?: number | null;
+    operation_type?: unknown;
+    status?: unknown;
+  };
   if (tErr) {
     throw new Error(tErr.message);
+  }
+
+  const taskList = (tasks ?? []) as RawTask[];
+
+  const taskIds = taskList.map((t) => String(t.id)).filter(Boolean);
+  const pickedByTask = new Map<string, number>();
+  if (taskIds.length > 0) {
+    let lq = supabase
+      .from("picking_logs")
+      .select("task_id,actual_qty")
+      .in("task_id", taskIds);
+    const { data: logs, error: lErr } = await lq;
+    if (lErr) throw new Error(lErr.message);
+    for (const lg of logs ?? []) {
+      const k = String((lg as { task_id?: string | null }).task_id ?? "");
+      if (!k) continue;
+      const v = Number((lg as { actual_qty?: number | null }).actual_qty) || 0;
+      pickedByTask.set(k, (pickedByTask.get(k) ?? 0) + v);
+    }
   }
 
   type Agg = {
@@ -78,20 +122,13 @@ export async function fetchTodayTasksGrouped(
   };
 
   const byOrder = new Map<string, Agg>();
-  for (const t of tasks ?? []) {
+  for (const t of taskList) {
     const orderRaw = String(t.order_no ?? "");
     const groupKey = orderGroupKey(orderRaw);
     const req = Number(t.required_qty ?? 0);
-    const pickingLogs = Array.isArray(
-      (t as { picking_logs?: unknown[] }).picking_logs,
-    )
-      ? ((t as { picking_logs?: Array<{ actual_qty?: number | null }> })
-          .picking_logs ?? [])
-      : [];
-    const pickedRow = pickingLogs.reduce(
-      (s, lg) => s + (Number(lg.actual_qty) || 0),
-      0,
-    );
+    const fromLogs = pickedByTask.get(String(t.id)) ?? 0;
+    const fromRow = Number((t as { picked_qty?: number | null }).picked_qty ?? 0) || 0;
+    const pickedRow = Math.max(fromLogs, fromRow);
     const rowOp = normalizePickingOpType(t.operation_type);
     const tid = String(t.id);
     const cur =
@@ -132,5 +169,6 @@ export async function fetchTodayTasksGrouped(
     },
   );
   mapped.sort((a, b) => a.order_no.localeCompare(b.order_no));
+  taskCache.set(cacheKey, { at: Date.now(), data: mapped });
   return mapped;
 }

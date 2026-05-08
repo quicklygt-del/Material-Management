@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { parseLabelQrPayload } from "@/lib/labelEncoding";
+import { withTenantParam } from "@/lib/tenantNav";
 
 type LookupRecord = {
   id?: string;
@@ -197,7 +198,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
       method: "POST",
       credentials: "include",
     });
-    router.replace("/");
+    router.replace(withTenantParam("/"));
   };
 
   const fireSuccessToast = useCallback((line: string) => {
@@ -390,7 +391,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
         {ctxErr}
         <button
           type="button"
-          onClick={() => router.replace("/other-operations")}
+          onClick={() => router.replace(withTenantParam("/other-operations"))}
           className="mx-auto mt-6 block rounded-xl bg-slate-900 px-6 py-3 text-white"
         >
           重新登入

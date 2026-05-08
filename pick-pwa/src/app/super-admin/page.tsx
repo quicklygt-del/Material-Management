@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { withTenantParam } from "@/lib/tenantNav";
 
 type TenantRow = {
   tenant_code: string;
@@ -26,7 +27,7 @@ export default function SuperAdminHomePage() {
     const r = await fetch("/api/super-admin/session");
     const s = (await r.json()) as { authenticated?: boolean };
     if (!s.authenticated) {
-      router.replace("/super-admin/login");
+      router.replace(withTenantParam("/super-admin/login"));
       return false;
     }
 
@@ -50,7 +51,7 @@ export default function SuperAdminHomePage() {
 
   const logout = async () => {
     await fetch("/api/super-admin/logout", { method: "POST" });
-    router.replace("/super-admin/login");
+    router.replace(withTenantParam("/super-admin/login"));
   };
 
   const onCreateTenant = async () => {
@@ -141,7 +142,7 @@ export default function SuperAdminHomePage() {
         </div>
         <div className="flex gap-2">
           <Link
-            href="/super-admin/label-templates"
+            href={withTenantParam("/super-admin/label-templates")}
             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-black text-amber-300"
           >
             標籤格式公版

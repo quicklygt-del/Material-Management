@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import { assertTenantWarehouseLedgerAllowed } from "@/lib/warehouseLedgerTenantGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +19,6 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const tenantId =
-    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
-    getDefaultLabelPrefix();
-
-  const denied = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
-  if (denied) return denied;
 
   const scope = (url.searchParams.get("scope") ?? "lines").trim();
   let sinceIso = url.searchParams.get("since")?.trim() ?? "";
@@ -40,22 +29,35 @@ export async function GET(req: Request) {
   }
 
   if (scope === "stock") {
-    const { data: rows, error } = await admin
+    const first = await admin
       .from("warehouse_ledger_stock")
-      .select("item_no,item_name,spec,on_hand,attrs,updated_at")
-      .eq("tenant_id", tenantId)
+      .select("item_no,item_name,spec,stock_quantity,attrs,updated_at")
       .order("item_no", { ascending: true });
+    let rows = first.data as Record<string, unknown>[] | null;
+    let error = first.error;
+    if (error && /column .*stock_quantity.* does not exist/i.test(error.message)) {
+      const legacy = await admin
+        .from("warehouse_ledger_stock")
+        .select("item_no,item_name,spec,on_hand,attrs,updated_at")
+        .order("item_no", { ascending: true });
+      rows = legacy.data as Record<string, unknown>[] | null;
+      error = legacy.error;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const sheet = XLSX.utils.json_to_sheet(rows ?? []);
+    const normalized = (rows ?? []).map((r) => ({
+      ...r,
+      on_hand: Number(r.stock_quantity ?? r.on_hand ?? 0) || 0,
+    }));
+    const sheet = XLSX.utils.json_to_sheet(normalized);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, sheet, "ledger_stock");
 
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-    const filename = `warehouse_ledger_stock_${tenantId}_${Date.now()}.xlsx`;
+    const filename = `warehouse_ledger_stock_${Date.now()}.xlsx`;
     return new NextResponse(buf, {
       status: 200,
       headers: {
@@ -71,7 +73,6 @@ export async function GET(req: Request) {
     .select(
       "created_at,direction,qty_delta,balance_after,shortage_forced,item_no,ref",
     )
-    .eq("tenant_id", tenantId)
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: true })
     .limit(100_000);
@@ -119,7 +120,7 @@ export async function GET(req: Request) {
   XLSX.utils.book_append_sheet(wb, sheet, "ledger_moves");
 
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const fn = `warehouse_ledger_moves_${tenantId}_${Date.now()}.xlsx`;
+  const fn = `warehouse_ledger_moves_${Date.now()}.xlsx`;
 
   return new NextResponse(buf, {
     status: 200,

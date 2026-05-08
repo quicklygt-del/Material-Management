@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
 import { normLedgerItemNo } from "@/lib/warehouseLedger";
 import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import { assertTenantWarehouseLedgerAllowed } from "@/lib/warehouseLedgerTenantGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +14,6 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const tenantId =
-    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
-    getDefaultLabelPrefix();
-
-  const denied = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
-  if (denied) return denied;
 
   const itemNo = normLedgerItemNo(url.searchParams.get("item_no"));
   const rawLimit = Number(url.searchParams.get("limit"));
@@ -41,7 +30,6 @@ export async function GET(req: Request) {
     .select(
       "id,direction,qty_delta,balance_after,shortage_forced,ref,created_at",
     )
-    .eq("tenant_id", tenantId)
     .eq("item_no", itemNo)
     .order("created_at", { ascending: false })
     .limit(limit);

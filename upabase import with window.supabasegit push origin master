@@ -1,0 +1,323 @@
+warning: in the working copy of 'pick-pwa/src/app/admin/page.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/pick-pwa/src/app/admin/page.tsx b/pick-pwa/src/app/admin/page.tsx[m
+[1mindex a722184..c8eef4f 100644[m
+[1m--- a/pick-pwa/src/app/admin/page.tsx[m
+[1m+++ b/pick-pwa/src/app/admin/page.tsx[m
+[36m@@ -3,13 +3,11 @@[m
+ import React, { useState, useEffect } from "react";[m
+ import supabase from "@/lib/supabase"; [m
+ import * as XLSX from "xlsx";[m
+[31m-import { useRouter } from "next/navigation";[m
+ import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";[m
+[31m-// 引入標準的登出並返回首頁函式[m
+[31m-import { exitToLoginHome } from "@/lib/auth"; [m
+[32m+[m[32m// 引入登出與清理邏輯[m
+[32m+[m[32mimport { clearSessionUser } from "@/lib/auth";[m[41m [m
+ [m
+ export default function AdminCommandCenter() {[m
+[31m-  const router = useRouter();[m
+   const [warehouseUsers, setWarehouseUsers] = useState<any[]>([]); [m
+   const [tasks, setTasks] = useState<any[]>([]); [m
+   const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);[m
+[36m@@ -20,25 +18,79 @@[m [mexport default function AdminCommandCenter() {[m
+   const [filterStatus, setFilterStatus] = useState<string>("全部");[m
+   const [filterType, setFilterType] = useState<string>("全部");[m
+ [m
+[31m-  // 1. 同步人員名單邏輯[m
+[31m-  const fetchUsers = async () => {[m
+[32m+[m[32m  /**[m
+[32m+[m[32m   * 1. 多租戶初始化邏輯[m
+[32m+[m[32m   */[m
+[32m+[m[32m  const initDashboard = async () => {[m
+     try {[m
+[31m-      if (!supabase) return;[m
+[31m-      const { data, error } = await supabase.from("warehouse_users").select("name, id");[m
+[31m-      if (error) throw error;[m
+[31m-      if (data) {[m
+[31m-        setWarehouseUsers(data);[m
+[31m-        setConnectionStatus("online");[m
+[32m+[m[32m      console.log("🚀 開始初始化指揮塔...");[m
+[32m+[m[32m      setConnectionStatus("loading");[m
+[32m+[m
+[32m+[m[32m      if (!supabase) {[m
+[32m+[m[32m        console.error("❌ Supabase Client 未正確載入");[m
+[32m+[m[32m        setConnectionStatus("offline");[m
+[32m+[m[32m        return;[m
+       }[m
+[32m+[m
+[32m+[m[32m      // 嘗試從 localStorage 取得租戶資訊[m
+[32m+[m[32m      const sessionData = localStorage.getItem("rmc_session_user");[m
+[32m+[m[32m      let currentTenantId = "";[m
+[32m+[m
+[32m+[m[32m      if (sessionData) {[m
+[32m+[m[32m        const parsed = JSON.parse(sessionData);[m
+[32m+[m[32m        currentTenantId = parsed.tenant_id;[m
+[32m+[m[32m        console.log("✅ 成功從 Session 取得租戶 ID:", currentTenantId);[m
+[32m+[m[32m      } else {[m
+[32m+[m[32m        console.warn("⚠️ 找不到本地 Session，嘗試從 Auth 重新獲取...");[m
+[32m+[m[32m        const { data: { session } } = await supabase.auth.getSession();[m
+[32m+[m[32m        currentTenantId = session?.user?.user_metadata?.tenant_id;[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      if (!currentTenantId) {[m
+[32m+[m[32m        console.error("❌ 嚴重錯誤：無法識別當前租戶身分，請重新登入。");[m
+[32m+[m[32m        setConnectionStatus("offline");[m
+[32m+[m[32m        return;[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      // 執行資料抓取[cite: 1][m
+[32m+[m[32m      await fetchUsers(currentTenantId);[m
+[32m+[m[32m      setConnectionStatus("online");[m
+[32m+[m
+     } catch (err) {[m
+[31m-      console.error("連線失敗:", err);[m
+[32m+[m[32m      console.error("❌ 初始化過程發生異常:", err);[m
+       setConnectionStatus("offline");[m
+     }[m
+   };[m
+ [m
+[32m+[m[32m  /**[m
+[32m+[m[32m   * 2. 抓取該租戶所屬的人員名單[cite: 1][m
+[32m+[m[32m   */[m
+[32m+[m[32m  const fetchUsers = async (tenantId: string) => {[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      console.log(`📡 正在請求租戶人員清單 (Tenant: ${tenantId})...`);[m
+[32m+[m[41m      [m
+[32m+[m[32m      const { data, error } = await supabase[m
+[32m+[m[32m        .from("warehouse_operators")[m
+[32m+[m[32m        .select("name, id, tenant_id")[m
+[32m+[m[32m        .eq("tenant_id", tenantId) // 多租戶隔離核心[cite: 1][m
+[32m+[m[32m        .eq("active", true)[m
+[32m+[m[32m        .order("name", { ascending: true });[m
+[32m+[m[41m        [m
+[32m+[m[32m      if (error) {[m
+[32m+[m[32m        console.error("❌ 資料庫讀取失敗:", error.message);[m
+[32m+[m[32m        throw error;[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      console.log("🎯 抓取到的人員:", data);[m
+[32m+[m[32m      setWarehouseUsers(data ?? []);[m
+[32m+[m[32m    } catch (err) {[m
+[32m+[m[32m      console.error("❌ fetchUsers 執行失敗:", err);[m
+[32m+[m[32m    }[m
+[32m+[m[32m  };[m
+[32m+[m
+   useEffect(() => {[m
+[31m-    fetchUsers();[m
+[31m-    // 讀取暫存的任務資料[m
+[32m+[m[32m    initDashboard();[m
+[32m+[m[32m    // 讀取暫存任務[m
+     const savedTasks = localStorage.getItem("rmc_task_final");[m
+     if (savedTasks) setTasks(JSON.parse(savedTasks));[m
+   }, []);[m
+[36m@@ -47,16 +99,13 @@[m [mexport default function AdminCommandCenter() {[m
+     localStorage.setItem("rmc_task_final", JSON.stringify(tasks));[m
+   }, [tasks]);[m
+ [m
+[31m-  /**[m
+[31m-   * 修正後的返回邏輯：[m
+[31m-   * 呼叫 exitToLoginHome 會徹底清除 "pick-pwa-session" [m
+[31m-   * 並使用 router.replace("/") 強制跳轉回入口頁[m
+[31m-   */[m
+[32m+[m[32m  // 返回入口並登出[m
+   const handleBackToLogin = () => {[m
+[31m-    exitToLoginHome(router);[m
+[32m+[m[32m    clearSessionUser();[m
+[32m+[m[32m    window.location.href = "/";[m
+   };[m
+ [m
+[31m-  // 2. Excel 匯入與單號辨識[m
+[32m+[m[32m  // Excel 匯入與辨識邏輯[m
+   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {[m
+     const file = e.target.files?.[0];[m
+     if (!file) return;[m
+[36m@@ -100,14 +149,9 @@[m [mexport default function AdminCommandCenter() {[m
+ [m
+   return ([m
+     <div className="min-h-screen bg-slate-50 pb-20">[m
+[31m-      {/* 頂部導覽列 */}[m
+       <nav className="bg-white px-6 py-3 shadow-sm border-b flex justify-between items-center">[m
+         <div className="flex gap-8 items-center font-bold">[m
+[31m-          {/* 修正點：使用 handleBackToLogin 按鈕 */}[m
+[31m-          <button [m
+[31m-            onClick={handleBackToLogin}[m
+[31m-            className="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors bg-transparent border-none cursor-pointer p-0 outline-none"[m
+[31m-          >[m
+[32m+[m[32m          <button onClick={handleBackToLogin} className="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors bg-transparent border-none cursor-pointer p-0">[m
+             <span className="text-xl">⬅️</span> [m
+             <span className="text-sm">返回系統入口</span>[m
+           </button>[m
+[36m@@ -120,55 +164,38 @@[m [mexport default function AdminCommandCenter() {[m
+             connectionStatus === 'online' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'[m
+           }`}>[m
+             <span className={`w-2 h-2 rounded-full ${connectionStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>[m
+[31m-            {connectionStatus === 'online' ? `資料庫已連線 (人員:${warehouseUsers.length})` : '資料庫連線中...'}[m
+[32m+[m[32m            {connectionStatus === 'online' ? `已同步租戶資料 (人員:${warehouseUsers.length})` : '正在連接資料庫...'}[m
+           </div>[m
+[31m-          <button onClick={fetchUsers} className="text-[10px] border px-2 py-1 rounded hover:bg-slate-50 font-bold text-slate-400">強制同步</button>[m
+[32m+[m[32m          <button onClick={initDashboard} className="text-[10px] border px-2 py-1 rounded hover:bg-slate-50 font-bold text-slate-400">重新連線</button>[m
+         </div>[m
+       </nav>[m
+ [m
+       <main className="p-8 max-w-6xl mx-auto space-y-6">[m
+[31m-        <div className="flex justify-between items-end">[m
+[31m-          <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter">指揮塔：任務監控面板</h1>[m
+[31m-        </div>[m
+[32m+[m[32m        <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter">指揮塔：任務監控面板</h1>[m
+ [m
+[31m-        {/* 1. 檔案匯入區 */}[m
+         <section className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl flex items-center justify-between border-4 border-white">[m
+           <div className="flex items-center gap-5">[m
+             <div className="bg-blue-600 p-4 rounded-2xl shadow-lg font-black text-2xl">UP</div>[m
+             <div>[m
+               <h2 className="text-xl font-bold">匯入任務單 (Excel)</h2>[m
+[31m-              <p className="text-slate-400 text-sm">系統將自動分析單號並生成作業任務</p>[m
+[32m+[m[32m              <p className="text-slate-400 text-sm">多租戶安全隔離模式已啟動</p>[m
+             </div>[m
+           </div>[m
+[31m-          <div className="relative">[m
+[31m-             <input type="file" onChange={handleExcelUpload} className="text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-8 file:rounded-full file:border-0 file:bg-blue-600 file:text-white file:font-black cursor-pointer hover:file:bg-blue-500 transition-all" />[m
+[31m-          </div>[m
+[32m+[m[32m          <input type="file" onChange={handleExcelUpload} className="text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-8 file:rounded-full file:border-0 file:bg-blue-600 file:text-white file:font-black cursor-pointer hover:file:bg-blue-500 transition-all" />[m
+         </section>[m
+ [m
+[31m-        {/* 2. 管理看板 */}[m
+         <section className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">[m
+           <div className="p-6 bg-slate-50 border-b space-y-4">[m
+             <div className="flex justify-between items-center">[m
+[31m-              <div className="flex gap-3 items-center">[m
+[31m-                 <h3 className="text-lg font-black text-slate-800">當前任務看板</h3>[m
+[31m-                 {(filterUser !== "全部" || filterStatus !== "全部") && ([m
+[31m-                   <button onClick={() => {setFilterUser("全部"); setFilterStatus("全部");}} className="text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-bold hover:bg-blue-200">✕ 清除篩選</button>[m
+[31m-                 )}[m
+[31m-              </div>[m
+[31m-              <button [m
+[31m-                onClick={() => {if(confirm("清除已完成任務？")) setTasks(tasks.filter(t => t.status !== "完成"))}}[m
+[31m-                className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md transition-all"[m
+[31m-              >[m
+[31m-                清除今日完成[m
+[31m-              </button>[m
+[32m+[m[32m              <h3 className="text-lg font-black text-slate-800">當前任務看板</h3>[m
+[32m+[m[32m              <button onClick={() => {if(confirm("清除已完成任務？")) setTasks(tasks.filter(t => t.status !== "完成"))}} className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md">清除今日完成</button>[m
+             </div>[m
+             [m
+[31m-            {/* 篩選控制器 */}[m
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-5 rounded-2xl border border-slate-100 shadow-inner">[m
+               <div className="space-y-1">[m
+[31m-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">倉管員負載篩選</label>[m
+[32m+[m[32m                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">倉管員篩選</label>[m
+                 <select value={filterUser} onChange={(e) => setFilterUser(e.target.value)} className="w-full text-sm p-3 rounded-xl border-2 border-slate-50 bg-slate-50 font-bold focus:border-blue-500 outline-none transition-all">[m
+[31m-                  <option value="全部">全部人員 (查看總負荷)</option>[m
+[32m+[m[32m                  <option value="全部">全部人員</option>[m
+                   {warehouseUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}[m
+                 </select>[m
+               </div>[m
+[36m@@ -194,85 +221,45 @@[m [mexport default function AdminCommandCenter() {[m
+             </div>[m
+           </div>[m
+ [m
+[31m-          {/* 任務列表 */}[m
+           <div className="divide-y divide-slate-100 min-h-[400px]">[m
+             {filteredTasks.length > 0 ? filteredTasks.map(t => ([m
+               <div key={t.id} className="p-6 hover:bg-blue-50/20 transition-all">[m
+                 <div className="flex justify-between items-center">[m
+                   <div className="flex items-center gap-5">[m
+[31m-                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black text-white shadow-sm ${[m
+[31m-                      t.type === '入庫' ? 'bg-blue-500' : t.type === '檢貨' ? 'bg-emerald-500' : 'bg-purple-500'[m
+[31m-                    }`}>[m
+[31m-                      {t.type}[m
+[31m-                    </div>[m
+[31m-                    <div className="cursor-pointer group" onClick={() => setExpandedTaskId(expandedTaskId === t.id ? null : t.id)}>[m
+[31m-                      <h4 className="font-black text-slate-800 text-lg group-hover:text-blue-600 transition-colors underline decoration-slate-200 underline-offset-4">{t.orderNo}</h4>[m
+[31m-                      <div className="flex items-center gap-3 mt-1">[m
+[31m-                        <span className="text-xs text-slate-400 font-bold">{t.items.length} 項目</span>[m
+[31m-                        <span className="text-[10px] text-blue-500 font-black">{expandedTaskId === t.id ? "收起明細 ▲" : "查看明細 ▼"}</span>[m
+[31m-                      </div>[m
+[32m+[m[32m                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black text-white ${t.type === '入庫' ? 'bg-blue-500' : t.type === '檢貨' ? 'bg-emerald-500' : 'bg-purple-500'}`}>{t.type}</div>[m
+[32m+[m[32m                    <div className="cursor-pointer" onClick={() => setExpandedTaskId(expandedTaskId === t.id ? null : t.id)}>[m
+[32m+[m[32m                      <h4 className="font-black text-slate-800 text-lg underline decoration-slate-200 underline-offset-4">{t.orderNo}</h4>[m
+[32m+[m[32m                      <span className="text-xs text-slate-400 font-bold">{t.items.length} 項目 - {expandedTaskId === t.id ? "收起明細 ▲" : "查看明細 ▼"}</span>[m
+                     </div>[m
+                   </div>[m
+ [m
+                   <div className="flex items-center gap-10">[m
+                     <div className="flex flex-col items-end gap-1">[m
+[31m-                      <span className="text-[10px] font-black text-slate-300 uppercase">執行人員</span>[m
+[32m+[m[32m                      <span className="text-[10px] font-black text-slate-300">執行人員</span>[m
+                       {t.status === "未派單" ? ([m
+[31m-                        <select [m
+[31m-                          onChange={(e) => {[m
+[31m-                            if(e.target.value) {[m
+[31m-                              setTasks(tasks.map(x => x.id === t.id ? { ...x, assignedTo: e.target.value, status: "未進行" } : x));[m
+[31m-                            }[m
+[31m-                          }}[m
+[31m-                          className="text-xs border-2 border-amber-400 rounded-xl px-4 py-2 font-black bg-white shadow-sm hover:border-blue-500 outline-none transition-all cursor-pointer"[m
+[31m-                        >[m
+[32m+[m[32m                        <select onChange={(e) => e.target.value && setTasks(tasks.map(x => x.id === t.id ? { ...x, assignedTo: e.target.value, status: "未進行" } : x))} className="text-xs border-2 border-amber-400 rounded-xl px-4 py-2 font-black bg-white cursor-pointer">[m
+                           <option value="">⚠️ 選擇倉管員</option>[m
+                           {warehouseUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}[m
+                         </select>[m
+                       ) : ([m
+                         <div className="flex items-center gap-2">[m
+[31m-                          <span className="text-sm font-black text-blue-700 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100">{t.assignedTo}</span>[m
+[32m+[m[32m                          <span className="text-sm font-black text-blue-700 bg-blue-50 px-3 py-1 rounded-lg">{t.assignedTo}</span>[m
+                           <button onClick={() => setTasks(tasks.map(x => x.id === t.id ? { ...x, assignedTo: "", status: "未派單" } : x))} className="text-[10px] text-slate-300 hover:text-rose-500 font-bold underline">重派</button>[m
+                         </div>[m
+                       )}[m
+                     </div>[m
+ [m
+[31m-                    <div className="flex flex-col items-center gap-1">[m
+[31m-                      <span className="text-[10px] font-black text-slate-300 uppercase">即時狀態</span>[m
+[31m-                      <div className={`px-4 py-1.5 rounded-full text-[10px] font-black shadow-sm ${[m
+[31m-                        t.status === '完成' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : [m
+[31m-                        t.status === '進行中' ? 'bg-blue-100 text-blue-700 border border-blue-200' : [m
+[31m-                        t.status === '未進行' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-400'[m
+[31m-                      }`}>[m
+[31m-                        {t.status}[m
+[31m-                      </div>[m
+[31m-                    </div>[m
+[31m-[m
+[31m-                    <div className="flex gap-3">[m
+[31m-                      {t.status !== "完成" && t.status !== "未派單" && ([m
+[31m-                        <button [m
+[31m-                          onClick={() => setTasks(tasks.map(x => x.id === t.id ? { ...x, status: x.status === "未進行" ? "進行中" : "完成" } : x))} [m
+[31m-                          className="bg-slate-900 text-white text-[10px] px-4 py-2.5 rounded-xl font-black hover:bg-blue-600 transition-all"[m
+[31m-                        >[m
+[31m-                          模擬現場回報[m
+[31m-                        </button>[m
+[31m-                      )}[m
+[31m-                      <button onClick={() => setTasks(tasks.filter(x => x.id !== t.id))} className="text-slate-300 hover:text-rose-600 p-2 transition-colors">[m
+[31m-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>[m
+[31m-                      </button>[m
+[31m-                    </div>[m
+[32m+[m[32m                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-black ${t.status === '完成' ? 'bg-emerald-100 text-emerald-700' : t.status === '進行中' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>{t.status}</div>[m
+[32m+[m[32m                    <button onClick={() => setTasks(tasks.filter(x => x.id !== t.id))} className="text-slate-300 hover:text-rose-600 p-2">✕</button>[m
+                   </div>[m
+                 </div>[m
+ [m
+                 {expandedTaskId === t.id && ([m
+[31m-                  <div className="mt-6 p-6 bg-slate-50 rounded-2xl border-2 border-blue-50 shadow-inner grid grid-cols-1 md:grid-cols-4 gap-3">[m
+[32m+[m[32m                  <div className="mt-6 p-6 bg-slate-50 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-3 shadow-inner">[m
+                     {t.items.map((item: any, i: number) => ([m
+[31m-                      <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 group-hover:border-blue-200 transition-all shadow-sm">[m
+[32m+[m[32m                      <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">[m
+                         <span className="font-mono text-xs text-slate-500 font-bold">{item.partNo}</span>[m
+[31m-                        <div className="flex items-center gap-2">[m
+[31m-                           <span className="text-[10px] text-slate-300">預計</span>[m
+[31m-                           <span className="font-black text-blue-600 text-lg">{item.qty}</span>[m
+[31m-                        </div>[m
+[32m+[m[32m                        <span className="font-black text-blue-600 text-lg">{item.qty}</span>[m
+                       </div>[m
+                     ))}[m
+                   </div>[m
+[36m@@ -280,9 +267,8 @@[m [mexport default function AdminCommandCenter() {[m
+               </div>[m
+             )) : ([m
+               <div className="flex flex-col items-center justify-center p-32 text-slate-200">[m
+[31m-                <div className="text-7xl mb-6 grayscale opacity-30">📋</div>[m
+[32m+[m[32m                <div className="text-7xl mb-6 opacity-30">📋</div>[m
+                 <div className="font-black italic text-lg tracking-widest">目前暫無符合條件之單據</div>[m
+[31m-                <p className="text-sm mt-1">請匯入 Excel 檔案或調整篩選條件</p>[m
+               </div>[m
+             )}[m
+           </div>[m

@@ -12,6 +12,7 @@ import {
   resolveSerialSource,
 } from "@/lib/labelEncoding";
 import { useQrCenterTenant } from "@/lib/qrCenterTenant";
+import { withTenantParam } from "@/lib/tenantNav";
 import {
   bluetoothSendText,
   formatLabelPrintLines,
@@ -461,7 +462,7 @@ export function QrCenterGenerator() {
     <main className="mx-auto w-full max-w-lg px-4 pb-24 pt-3 sm:px-5">
       <div className="mb-4 flex justify-end rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
         <Link
-          href="/qr-center/scan"
+          href={withTenantParam("/qr-center/scan")}
           className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-lg border-2 border-blue-700 bg-blue-50 px-4 text-sm font-black text-blue-900"
         >
           掃描辨識

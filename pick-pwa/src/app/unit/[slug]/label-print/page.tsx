@@ -14,6 +14,7 @@ import {
   type ExcelLabelBatchItem,
   type LabelTemplateField,
 } from "@/lib/labelPrintTemplate";
+import { withTenantParam } from "@/lib/tenantNav";
 
 const QR_MAX = 1200;
 
@@ -363,7 +364,7 @@ export default function UnitLabelPrintPage() {
       <div className="mx-auto max-w-md px-4 py-16 text-center text-sm font-black text-red-700">
         {ctxErr}
         <Link
-          href="/other-operations"
+          href={withTenantParam("/other-operations")}
           className="mt-6 inline-block underline"
         >
           重新登入
