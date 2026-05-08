@@ -111,15 +111,6 @@ export function WarehouseStyleTaskDeck({
             </p>
           )}
         </div>
-        {!compactForUnit ? (
-          <button
-            type="button"
-            onClick={() => router.push(withTenantParam("/operate?op=manual"))}
-            className="mt-4 h-[58px] w-full rounded-xl bg-blue-700 text-xl font-black text-white"
-          >
-            ＋自主發起掃描
-          </button>
-        ) : null}
       </section>
     </>
   );
