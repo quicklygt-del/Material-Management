@@ -39,6 +39,8 @@ export default function OperatorWorkbenchPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
+  /** 掃描迴圈必須用 ref：避免 `scanOpen` 閉包仍為 false 導致無法辨識 */
+  const scanningActiveRef = useRef(false);
 
   useEffect(() => {
     const u = getSessionUser();
@@ -58,6 +60,7 @@ export default function OperatorWorkbenchPage() {
   const tenantId = getDefaultLabelPrefix();
 
   const stopScanner = () => {
+    scanningActiveRef.current = false;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -195,10 +198,12 @@ export default function OperatorWorkbenchPage() {
     if (scanBusy) return;
     setScanMsg(null);
     setScanManualInput("");
+    scanningActiveRef.current = true;
     setScanOpen(true);
     const Detector =
       typeof window !== "undefined" ? window.BarcodeDetector : undefined;
     if (!Detector) {
+      scanningActiveRef.current = false;
       setScanMsg("此瀏覽器不支援相機掃描，請改用手動貼上 QR。");
       return;
     }
@@ -211,12 +216,28 @@ export default function OperatorWorkbenchPage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        await new Promise<void>((resolve) => {
+          const v = videoRef.current;
+          if (!v) {
+            resolve();
+            return;
+          }
+          if (v.readyState >= 2) resolve();
+          else v.addEventListener("loadeddata", () => resolve(), { once: true });
+        });
       }
       const det = new Detector({
         formats: ["qr_code", "code_128", "code_39", "ean_13", "upc_a"],
       });
       const loop = async () => {
-        if (!videoRef.current || !scanOpen) return;
+        if (!videoRef.current || !scanningActiveRef.current) return;
+        const v = videoRef.current;
+        if (v.videoWidth === 0 || v.videoHeight === 0) {
+          rafRef.current = requestAnimationFrame(() => {
+            void loop();
+          });
+          return;
+        }
         try {
           const found = await det.detect(videoRef.current);
           const code = String(found?.[0]?.rawValue ?? "").trim();
@@ -233,6 +254,7 @@ export default function OperatorWorkbenchPage() {
       };
       void loop();
     } catch {
+      scanningActiveRef.current = false;
       setScanMsg("無法啟用相機，請檢查權限或改用手動貼上 QR。");
     }
   };
@@ -297,19 +319,33 @@ export default function OperatorWorkbenchPage() {
       </section>
 
       {scanOpen ? (
-        <section className="fixed inset-0 z-[90] flex flex-col gap-3 bg-black/90 p-4">
-          <div className="rounded-xl bg-white p-3">
-            <p className="text-sm font-black text-slate-800">
-              將 QR 對準畫面；若無法辨識可手動貼上。
-            </p>
+        <section className="fixed inset-0 z-[90] flex flex-col bg-black">
+          <div className="relative min-h-0 flex-1">
+            <video
+              ref={videoRef}
+              className="absolute inset-0 h-full w-full bg-black object-cover"
+              playsInline
+              muted
+            />
+            {/* 瞄準框：pointer-events-none 不阻擋相機管線，僅視覺疊加 */}
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4">
+              <div className="flex flex-col items-center">
+                <div
+                  className="relative h-[250px] w-[250px] shrink-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"
+                  aria-hidden
+                >
+                  <span className="absolute left-0 top-0 h-10 w-10 border-l-[4px] border-t-[4px] border-[#00FF00]" />
+                  <span className="absolute right-0 top-0 h-10 w-10 border-r-[4px] border-t-[4px] border-[#00FF00]" />
+                  <span className="absolute bottom-0 left-0 h-10 w-10 border-b-[4px] border-l-[4px] border-[#00FF00]" />
+                  <span className="absolute bottom-0 right-0 h-10 w-10 border-b-[4px] border-r-[4px] border-[#00FF00]" />
+                </div>
+                <p className="mt-5 text-center text-sm font-black tracking-wide text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  請將 QR 碼放入框內
+                </p>
+              </div>
+            </div>
           </div>
-          <video
-            ref={videoRef}
-            className="min-h-0 flex-1 rounded-xl bg-black object-cover"
-            playsInline
-            muted
-          />
-          <div className="space-y-2 rounded-xl bg-white p-3">
+          <div className="shrink-0 space-y-2 rounded-t-2xl bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
             <input
               className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
               placeholder="手動貼上 QR / 料號"
@@ -330,7 +366,10 @@ export default function OperatorWorkbenchPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setScanOpen(false)}
+                onClick={() => {
+                  setScanOpen(false);
+                  stopScanner();
+                }}
                 className="h-11 rounded-xl bg-slate-800 text-sm font-black text-white"
               >
                 關閉
