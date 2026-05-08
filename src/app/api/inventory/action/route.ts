@@ -26,8 +26,8 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+  const  =
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const qr_payload = String(b.qr_payload ?? "").trim();
   const label_record_id = String(b.label_record_id ?? "").trim();
   const warehouse_id = String(b.warehouse_id ?? "").trim();
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       ? qtyRaw
       : Number.parseInt(String(qtyRaw ?? ""), 10);
 
-  if (!tenant_id || !qr_payload || !warehouse_id || !operator_name) {
+  if (! || !qr_payload || !warehouse_id || !operator_name) {
     return NextResponse.json({ error: "缺少必填欄位" }, { status: 400 });
   }
   if (!["inbound", "pick", "stocktake"].includes(action_type)) {
@@ -57,20 +57,20 @@ export async function POST(req: Request) {
 
   const { data: wh, error: wErr } = await admin
     .from("storage_zones")
-    .select("id,tenant_id")
+    .select("id,")
     .eq("id", warehouse_id)
     .maybeSingle();
   if (wErr || !wh) {
     return NextResponse.json({ error: "倉庫不存在" }, { status: 400 });
   }
-  if (normalizeLabelPrefix(String(wh.tenant_id)) !== tenant_id) {
+  if (normalizeLabelPrefix(String(wh.)) !== ) {
     return NextResponse.json({ error: "倉庫與租戶不符" }, { status: 403 });
   }
 
   const { data: inserted, error: insErr } = await admin
     .from("inventory_logs")
     .insert({
-      tenant_id,
+      ,
       label_record_id: label_record_id || null,
       qr_payload,
       warehouse_id,

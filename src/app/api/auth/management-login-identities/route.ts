@@ -24,7 +24,7 @@ function sortUsernames(usernames: string[]): string[] {
 
 /**
  * 首頁登入帳號清單（依租戶篩選）：
- * app_users、warehouse_operators（company_id）、storage_zones.portal_login（tenant_id）。
+ * app_users、warehouse_operators（company_id）、storage_zones.portal_login（）。
  */
 export async function GET(req: Request) {
   const adminClient = getSupabaseServiceRoleClient();
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
   const { data: zoneRows, error: zoneErr } = await adminClient
     .from("storage_zones")
     .select("portal_login")
-    .eq("tenant_id", tenantId);
+    .eq("", tenantId);
 
   if (zoneErr) {
     return NextResponse.json(

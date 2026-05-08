@@ -30,8 +30,8 @@ export default function AdminCommandCenter() {
 
     const { data, error } = await supabaseClient
       .from("warehouse_operators")
-      .select("name, id, company_id") // 這裡由 tenant_id 改為 company_id
-      .eq("company_id", targetCompanyId) // 這裡由 tenant_id 改為 company_id
+      .select("name, id, company_id") // 這裡由  改為 company_id
+      .eq("company_id", targetCompanyId) // 這裡由  改為 company_id
       .eq("active", true)
       .order("name", { ascending: true });
 

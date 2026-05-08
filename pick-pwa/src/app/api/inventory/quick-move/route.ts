@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
@@ -24,8 +20,6 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
   const action = String(b.action ?? "").trim() as MoveAction;
   const operator_name = String(b.operator_name ?? "").trim();
   const order_no = String(b.order_no ?? "").trim();
@@ -36,7 +30,7 @@ export async function POST(req: Request) {
   const quantity =
     Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.floor(qtyRaw) : 0;
 
-  if (!tenant_id || !operator_name || !item_no || !label_record_id || !qr_payload) {
+  if (!operator_name || !item_no || !label_record_id || !qr_payload) {
     return NextResponse.json({ error: "缺少必要欄位" }, { status: 400 });
   }
   if (action !== "pick" && action !== "return") {
@@ -51,7 +45,6 @@ export async function POST(req: Request) {
   const pick = await admin
     .from("warehouse_ledger_stock")
     .select("id,stock_quantity,on_hand")
-    .eq("tenant_id", tenant_id)
     .eq("item_no", item_no)
     .maybeSingle();
   if (pick.error) {
@@ -70,7 +63,6 @@ export async function POST(req: Request) {
 
   if (!pick.data) {
     const { error: insErr } = await admin.from("warehouse_ledger_stock").insert({
-      tenant_id,
       item_no,
       item_name: "",
       spec: "",
@@ -93,7 +85,6 @@ export async function POST(req: Request) {
   }
 
   const txPayload: Record<string, unknown> = {
-    tenant_id,
     operator_name,
     order_no: order_no || null,
     item_no,

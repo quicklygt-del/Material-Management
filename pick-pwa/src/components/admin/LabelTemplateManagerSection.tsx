@@ -204,7 +204,7 @@ export function LabelTemplateManagerSection({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: companyId,
+          : companyId,
           name,
           field_definitions: norm,
         }),
@@ -237,7 +237,7 @@ export function LabelTemplateManagerSection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id,
-          tenant_id: companyId,
+          : companyId,
           name: editName.trim(),
           field_definitions: norm,
         }),

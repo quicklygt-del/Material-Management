@@ -39,7 +39,7 @@ type Props = {
 };
 
 async function postLabelRecord(body: {
-  tenant_id: string;
+  : string;
   label_type: LabelTypeCode;
   qr_payload: string;
   item_no: string;
@@ -176,7 +176,7 @@ export function LabelWorkbench({
         throw new Error("無法寫入紀錄：請先登入。");
       }
       await postLabelRecord({
-        tenant_id: labelPrefix,
+        : labelPrefix,
         label_type: typeCode,
         qr_payload: payload,
         item_no: recordItemNo,
@@ -306,7 +306,7 @@ export function LabelWorkbench({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              tenant_id: labelPrefix,
+              : labelPrefix,
               item_nos: uniqNos,
             }),
           },

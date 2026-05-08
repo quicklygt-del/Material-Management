@@ -1,9 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
+import { normalizeLabelPrefix } from "@/lib/labelEncoding";
 import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
@@ -31,8 +28,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON 格式錯誤" }, { status: 400 });
   }
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
   const portal_login = String(b.portal_login ?? "").trim();
   const password = String(b.password ?? "");
   if (!portal_login || !password) {
@@ -45,7 +40,6 @@ export async function POST(req: Request) {
     .select(
       `id,name,slug,${szCol},portal_login,portal_password`,
     )
-    .eq(szCol, tenant_id)
     .eq("portal_login", portal_login)
     .maybeSingle();
 
@@ -69,7 +63,7 @@ export async function POST(req: Request) {
       slug,
       tenant: normalizeLabelPrefix(
         zoneRowScopeValue(
-          row as { tenant_id?: unknown; company_id?: unknown },
+          row as { ?: unknown; company_id?: unknown },
         ),
       ),
       name: String(row.name ?? "").trim() || "單位",

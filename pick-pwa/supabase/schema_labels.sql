@@ -1,7 +1,7 @@
--- 標籤中心：標籤列印紀錄（依 tenant_id 隔離）
+-- 標籤中心：標籤列印紀錄（依  隔離）
 create table if not exists public.label_records (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   label_type text not null check (label_type in ('S','R','B','Q')),
   qr_payload text not null,
   item_no text not null,
@@ -12,7 +12,7 @@ create table if not exists public.label_records (
 );
 
 create index if not exists idx_label_records_tenant_created
-  on public.label_records (tenant_id, created_at desc);
+  on public.label_records (, created_at desc);
 
 alter table public.label_records enable row level security;
 drop policy if exists label_records_all on public.label_records;

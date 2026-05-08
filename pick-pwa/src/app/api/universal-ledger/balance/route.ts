@@ -18,13 +18,13 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const tenant_id =
+  const  =
     normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
     getDefaultLabelPrefix();
   const unit_id = url.searchParams.get("unit_id")?.trim();
   const label_record_id = url.searchParams.get("label_record_id")?.trim();
 
-  if (!tenant_id || !unit_id || !label_record_id) {
+  if (! || !unit_id || !label_record_id) {
     return NextResponse.json(
       { error: "缺少 tenant、unit_id 或 label_record_id" },
       { status: 400 },
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   const { data: last, error: e1 } = await admin
     .from("universal_ledger_records")
     .select("balance_after")
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("unit_id", unit_id)
     .eq("label_record_id", label_record_id)
     .order("created_at", { ascending: false })
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
   const { data, error } = await admin
     .from("universal_ledger_records")
     .select("quantity_delta")
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("unit_id", unit_id)
     .eq("label_record_id", label_record_id);
 

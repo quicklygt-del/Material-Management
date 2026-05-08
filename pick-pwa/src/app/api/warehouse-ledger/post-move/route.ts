@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenantId = normalizeLabelPrefix(String(b.tenant_id ?? "")) || "CARB";
+  const tenantId = normalizeLabelPrefix(String(b. ?? "")) || "CARB";
   const itemNo = normLedgerItemNo(b.item_no);
   const direction = String(b.direction ?? "").trim() as WarehouseLedgerDirection;
   const qty = Number(b.qty);

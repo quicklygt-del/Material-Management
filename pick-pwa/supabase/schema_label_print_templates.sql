@@ -3,7 +3,7 @@
 
 create table if not exists public.label_print_templates (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   name text not null,
   /** 欄位順序：[{ "key": "item_no", "label_zh": "料號" }, ...]；须包含一筆 key = print_count */
   field_definitions jsonb not null default '[]'::jsonb,
@@ -14,7 +14,7 @@ create table if not exists public.label_print_templates (
 comment on table public.label_print_templates is '作業單位標籤 Excel／QR 欄位範本';
 
 create index if not exists idx_label_print_templates_tenant
-  on public.label_print_templates (tenant_id);
+  on public.label_print_templates ();
 
 alter table public.storage_zones
   add column if not exists label_template_id uuid

@@ -18,7 +18,7 @@ SET balance_after = s.bal::integer
 FROM (
   SELECT id,
     SUM(quantity_delta) OVER (
-      PARTITION BY tenant_id, unit_id, COALESCE(label_record_id::text, qr_payload)
+      PARTITION BY , unit_id, COALESCE(label_record_id::text, qr_payload)
       ORDER BY created_at
       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     ) AS bal

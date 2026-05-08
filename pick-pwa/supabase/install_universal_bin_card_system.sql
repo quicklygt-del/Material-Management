@@ -9,12 +9,12 @@
 -- 0) 管理單位（原「虛擬倉」）— API /warehouses 使用此表
 create table if not exists public.storage_zones (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   name text not null,
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_storage_zones_tenant on public.storage_zones (tenant_id);
+create index if not exists idx_storage_zones_tenant on public.storage_zones ();
 
 comment on table public.storage_zones is '虛擬倉／管理區；每租戶最多 5 筆（由應用程式限制）';
 
@@ -36,7 +36,7 @@ alter table public.label_records
 -- 1) 物料主軸異動
 create table if not exists public.material_transactions (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   material_item_no text not null,
   label_record_id uuid references public.label_records (id) on delete set null,
   action_type text not null check (action_type in ('inbound', 'pick', 'stocktake')),
@@ -47,7 +47,7 @@ create table if not exists public.material_transactions (
 );
 
 create index if not exists idx_material_tx_tenant_item
-  on public.material_transactions (tenant_id, material_item_no);
+  on public.material_transactions (, material_item_no);
 create index if not exists idx_material_tx_label
   on public.material_transactions (label_record_id);
 
@@ -61,7 +61,7 @@ grant select, insert, update, delete on public.material_transactions to service_
 -- 2) 單位萬用帳本主表（含物料卡欄位 summary / balance_after）
 create table if not exists public.universal_ledger_records (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   unit_id uuid not null references public.storage_zones (id) on delete cascade,
   label_record_id uuid references public.label_records (id) on delete set null,
   qr_payload text not null,
@@ -83,7 +83,7 @@ comment on column public.universal_ledger_records.summary is '物料卡摘要（
 comment on column public.universal_ledger_records.balance_after is '本筆異動後該標籤於此單位之結餘';
 
 create index if not exists idx_universal_ledger_tenant_unit
-  on public.universal_ledger_records (tenant_id, unit_id);
+  on public.universal_ledger_records (, unit_id);
 create index if not exists idx_universal_ledger_label_unit
   on public.universal_ledger_records (label_record_id, unit_id);
 
@@ -102,7 +102,7 @@ SET balance_after = s.bal::integer
 FROM (
   SELECT id,
     SUM(quantity_delta) OVER (
-      PARTITION BY tenant_id, unit_id, COALESCE(label_record_id::text, qr_payload)
+      PARTITION BY , unit_id, COALESCE(label_record_id::text, qr_payload)
       ORDER BY created_at
       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     ) AS bal

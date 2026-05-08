@@ -36,8 +36,8 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenant_id = normalizeLabelPrefix(
-    String(b.tenant_id ?? getDefaultLabelPrefix()),
+  const  = normalizeLabelPrefix(
+    String(b. ?? getDefaultLabelPrefix()),
   );
   const label_type = String(b.label_type ?? "");
   const qr_payload = String(b.qr_payload ?? "");
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       : {};
 
   const allowedTypes = ["S", "R", "B", "Q", "D", "UNIVERSAL"] as const;
-  if (!tenant_id || !allowedTypes.includes(label_type as (typeof allowedTypes)[number])) {
+  if (! || !allowedTypes.includes(label_type as (typeof allowedTypes)[number])) {
     return NextResponse.json({ error: "標籤類型無效" }, { status: 400 });
   }
   if (!qr_payload) {
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   const { data: inserted, error: insErr } = await admin
     .from("label_records")
     .insert({
-      tenant_id,
+      ,
       label_type,
       qr_payload,
       item_no,
@@ -91,12 +91,12 @@ export async function POST(req: Request) {
   ) {
     const { data: zone } = await admin
       .from("storage_zones")
-      .select("id,tenant_id")
+      .select("id,")
       .eq("id", unitFromMeta)
       .maybeSingle();
     if (
       zone &&
-      normalizeLabelPrefix(String(zone.tenant_id)) === tenant_id
+      normalizeLabelPrefix(String(zone.)) === 
     ) {
       const ledger_action = String(
         meta.ledger_action ?? "inbound",
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
 
       const prevBal = await getPreviousLabelBalance(
         admin,
-        tenant_id,
+        ,
         unitFromMeta,
         newId,
       );
@@ -153,7 +153,7 @@ export async function POST(req: Request) {
       const { error: ledErr } = await admin
         .from("universal_ledger_records")
         .insert({
-          tenant_id,
+          ,
           unit_id: unitFromMeta,
           label_record_id: newId,
           qr_payload,

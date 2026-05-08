@@ -33,7 +33,7 @@ export function normLedgerItemNo(raw: unknown): string {
 }
 
 export type WarehouseLedgerPostBody = {
-  tenant_id?: string;
+  ?: string;
   item_no: string;
   direction: WarehouseLedgerDirection;
   qty: number;

@@ -334,7 +334,7 @@ export function QrCenterGenerator() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        tenant_id: tenantId,
+        : tenantId,
         label_type: labelType,
         qr_payload: qrPayload,
         item_no: recordItemNo,

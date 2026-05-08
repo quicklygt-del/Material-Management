@@ -27,8 +27,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON 格式錯誤" }, { status: 400 });
   }
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+  const  =
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const portal_login = String(b.portal_login ?? "").trim();
   const password = String(b.password ?? "");
   if (!portal_login || !password) {
@@ -38,9 +38,9 @@ export async function POST(req: Request) {
   const { data: row, error } = await admin
     .from("storage_zones")
     .select(
-      "id,name,slug,tenant_id,portal_login,portal_password",
+      "id,name,slug,,portal_login,portal_password",
     )
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("portal_login", portal_login)
     .maybeSingle();
 
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     String(row.id),
     {
       slug,
-      tenant: normalizeLabelPrefix(String(row.tenant_id)),
+      tenant: normalizeLabelPrefix(String(row.)),
       name: String(row.name ?? "").trim() || "單位",
     },
     COOKIE_MAX_AGE_SEC,

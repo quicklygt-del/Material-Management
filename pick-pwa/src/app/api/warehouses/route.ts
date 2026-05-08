@@ -33,7 +33,7 @@ function sanitizeSlug(raw: string): string {
 
 async function templateBelongsToTenant(
   admin: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
-  tenant_id: string,
+  : string,
   templateId: string | null | undefined,
 ): Promise<boolean> {
   const tid = String(templateId ?? "").trim();
@@ -41,7 +41,7 @@ async function templateBelongsToTenant(
   const { data, error } = await admin
     .from("label_print_templates")
     .select("id")
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("id", tid)
     .maybeSingle();
   if (error) return false;
@@ -50,14 +50,14 @@ async function templateBelongsToTenant(
 
 async function slugIsFree(
   admin: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
-  tenant_id: string,
+  : string,
   candidate: string,
 ): Promise<boolean> {
   const scopeCol = getStorageZonesScopeColumn();
   const { data, error } = await admin
     .from("storage_zones")
     .select("id")
-    .eq(scopeCol, tenant_id)
+    .eq(scopeCol, )
     .eq("slug", candidate)
     .limit(1);
   if (error) return false;
@@ -66,7 +66,7 @@ async function slugIsFree(
 
 async function allocateUniqueSlug(
   admin: NonNullable<ReturnType<typeof getSupabaseServiceRoleClient>>,
-  tenant_id: string,
+  : string,
   preferred: string,
 ): Promise<string> {
   const base =
@@ -83,7 +83,7 @@ async function allocateUniqueSlug(
             0,
             56,
           );
-    if (await slugIsFree(admin, tenant_id, candidate)) return candidate;
+    if (await slugIsFree(admin, , candidate)) return candidate;
   }
   return `u-${randomBytes(16).toString("hex")}`.slice(0, 56);
 }
@@ -106,7 +106,7 @@ function normalizeDbError(insertErr: {
     if (
       raw.includes("slug") ||
       raw.includes("tenant_slug") ||
-      raw.includes("(tenant_id, slug)") ||
+      raw.includes("(, slug)") ||
       raw.includes("(company_id, slug)")
     ) {
       return "路徑 slug 與現有單位衝突，請在表單手填不重複英數 slug 或稍後再試。";
@@ -127,12 +127,12 @@ export async function GET(req: Request) {
   }
   const url = new URL(req.url);
   const fromQuery = normalizeLabelPrefix(url.searchParams.get("tenant") ?? "");
-  const tenant_id = fromQuery || getDefaultLabelPrefix();
+  const  = fromQuery || getDefaultLabelPrefix();
   const scopeCol = getStorageZonesScopeColumn();
   const { data, error } = await admin
     .from("storage_zones")
     .select(storageZonesSelectFull())
-    .eq(scopeCol, tenant_id)
+    .eq(scopeCol, )
     .order("created_at", { ascending: true });
   if (error) {
     const em = error.message ?? "";
@@ -141,7 +141,7 @@ export async function GET(req: Request) {
         ? admin
             .from("storage_zones")
             .select(storageZonesSelectNoLabelTemplate())
-            .eq(scopeCol, tenant_id)
+            .eq(scopeCol, )
             .order("created_at", { ascending: true })
         : null;
     if (fallback) {
@@ -150,11 +150,11 @@ export async function GET(req: Request) {
         const zones = (fr.data ?? []).map((z) => {
           const row = z as unknown as Record<string, unknown>;
           const scopeVal = zoneRowScopeValue(
-            row as { tenant_id?: unknown; company_id?: unknown },
+            row as { ?: unknown; company_id?: unknown },
           );
           return {
             ...row,
-            tenant_id: scopeVal,
+            : scopeVal,
             label_template_id: null as string | null,
             name: String(row.name ?? "").trim() || "未命名",
             slug: String(row.slug ?? "").trim(),
@@ -172,11 +172,11 @@ export async function GET(req: Request) {
   const zones = (data ?? []).map((z) => {
     const row = z as unknown as Record<string, unknown>;
     const scopeVal = zoneRowScopeValue(
-      row as { tenant_id?: unknown; company_id?: unknown },
+      row as { ?: unknown; company_id?: unknown },
     );
     return {
       ...row,
-      tenant_id: scopeVal,
+      : scopeVal,
       name: String(row.name ?? "").trim() || "未命名",
       slug: String(row.slug ?? "").trim(),
       portal_login: String(row.portal_login ?? "").trim(),
@@ -202,8 +202,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON 格式錯誤" }, { status: 400 });
   }
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+  const  =
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const name = String(b.name ?? "").trim();
   if (!name) {
     return NextResponse.json({ error: "缺少單位名稱" }, { status: 400 });
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
   const { data: tenantZones, error: cErr } = await admin
     .from("storage_zones")
     .select("id")
-    .eq(scopeCol, tenant_id);
+    .eq(scopeCol, );
   if (cErr) {
     return NextResponse.json({ error: cErr.message }, { status: 500 });
   }
@@ -238,7 +238,7 @@ export async function POST(req: Request) {
       ? null
       : String(b.label_template_id).trim() || null;
   if (label_template_id) {
-    const okT = await templateBelongsToTenant(admin, tenant_id, label_template_id);
+    const okT = await templateBelongsToTenant(admin, , label_template_id);
     if (!okT) {
       return NextResponse.json(
         { error: "標籤範本不存在或不屬於本公司" },
@@ -256,7 +256,7 @@ export async function POST(req: Request) {
     sanitizeSlug(slugifyUnitBase(name)) ||
     slugifyUnitBase(name) ||
     name;
-  let slugAlloc = await allocateUniqueSlug(admin, tenant_id, preferred);
+  let slugAlloc = await allocateUniqueSlug(admin, , preferred);
 
   /** insert 瞬間若有 race 撞上 unique(slug)，改隨機 slug 重試數次 */
   let data: Record<string, unknown> | null = null;
@@ -275,7 +275,7 @@ export async function POST(req: Request) {
       portal_password: portal_password.trim(),
       ...(label_template_id ? { label_template_id } : {}),
     };
-    insertRow[scopeCol] = tenant_id;
+    insertRow[scopeCol] = ;
 
     const ins = await admin
       .from("storage_zones")
@@ -298,7 +298,7 @@ export async function POST(req: Request) {
     const slugFight =
       isDup &&
       (raw.includes("slug") ||
-        raw.includes("(tenant_id, slug)") ||
+        raw.includes("(, slug)") ||
         raw.includes("(company_id, slug)") ||
         raw.includes("tenant_slug"));
 
@@ -321,8 +321,8 @@ export async function POST(req: Request) {
   return NextResponse.json({
     warehouse: {
       ...w,
-      tenant_id: zoneRowScopeValue(
-        w as { tenant_id?: unknown; company_id?: unknown },
+      : zoneRowScopeValue(
+        w as { ?: unknown; company_id?: unknown },
       ),
     },
   });
@@ -342,7 +342,7 @@ export async function PATCH(req: Request) {
   const b = body as Record<string, unknown>;
   const id = String(b.id ?? "");
   const tenant_q =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
 
   if (!id) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 });
@@ -360,7 +360,7 @@ export async function PATCH(req: Request) {
   if (
     normalizeLabelPrefix(
       zoneRowScopeValue(
-        existing as { tenant_id?: unknown; company_id?: unknown },
+        existing as { ?: unknown; company_id?: unknown },
       ),
     ) !== tenant_q
   ) {
@@ -450,8 +450,8 @@ export async function PATCH(req: Request) {
   return NextResponse.json({
     warehouse: {
       ...w,
-      tenant_id: zoneRowScopeValue(
-        w as { tenant_id?: unknown; company_id?: unknown },
+      : zoneRowScopeValue(
+        w as { ?: unknown; company_id?: unknown },
       ),
     },
     ...(newInviteToken ? { invite_token: newInviteToken } : {}),
@@ -465,7 +465,7 @@ export async function DELETE(req: Request) {
   }
   const url = new URL(req.url);
   const id = url.searchParams.get("id")?.trim();
-  const tenant_id =
+  const  =
     normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
     getDefaultLabelPrefix();
   if (!id) {
@@ -483,8 +483,8 @@ export async function DELETE(req: Request) {
   }
   if (
     normalizeLabelPrefix(
-      zoneRowScopeValue(zone as { tenant_id?: unknown; company_id?: unknown }),
-    ) !== tenant_id
+      zoneRowScopeValue(zone as { ?: unknown; company_id?: unknown }),
+    ) !== 
   ) {
     return NextResponse.json({ error: "無權限刪除此單位" }, { status: 403 });
   }

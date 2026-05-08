@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       slug: String(row.slug),
       tenant: normalizeLabelPrefix(
         zoneRowScopeValue(
-          row as { tenant_id?: unknown; company_id?: unknown },
+          row as { ?: unknown; company_id?: unknown },
         ) || getDefaultLabelPrefix(),
       ),
       name: String(row.name ?? "").trim() || "單位",

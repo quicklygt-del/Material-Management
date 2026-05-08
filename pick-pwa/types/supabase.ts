@@ -14,7 +14,6 @@ export type Json =
 /** 對應資料表 `public.warehouse_ledger_stock` */
 export type WarehouseLedgerStockRow = {
   id: string;
-  tenant_id: string;
   item_no: string;
   item_name: string;
   spec: string;

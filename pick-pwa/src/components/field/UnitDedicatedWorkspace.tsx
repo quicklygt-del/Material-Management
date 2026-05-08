@@ -26,7 +26,7 @@ type UnitCtx = {
   unit_id: string;
   slug: string;
   name: string;
-  tenant_id: string;
+  : string;
   portal_login: string;
 };
 
@@ -181,7 +181,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
         unit_id: String(j.unit_id ?? ""),
         slug: canonSlug,
         name: String(j.name ?? ""),
-        tenant_id: String(j.tenant_id ?? ""),
+        : String(j. ?? ""),
         portal_login: String(j.portal_login ?? "").trim(),
       });
       if (canonSlug && canonSlug !== slug) {
@@ -241,7 +241,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tenant_id: ctx.tenant_id,
+            : ctx.,
             unit_id: ctx.unit_id,
             label_record_id: rec.id,
             qr_payload: rec.qr_payload,
@@ -277,7 +277,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
       setBusyLook(true);
       try {
         const u = new URL("/api/label-records/lookup", window.location.origin);
-        u.searchParams.set("tenant", ctx.tenant_id);
+        u.searchParams.set("tenant", ctx.);
         u.searchParams.set("qr", raw);
         const res = await fetch(u.toString());
         const json = (await res.json()) as {

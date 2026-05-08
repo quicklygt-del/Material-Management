@@ -18,12 +18,12 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** 與 DB label_records.tenant_id、QR 第一段一致；可由環境覆寫 */
+/** 與 DB label_records.、QR 第一段一致；可由環境覆寫 */
 export function getDefaultLabelPrefix(): string {
   const raw =
     (typeof process !== "undefined" &&
       (process.env.NEXT_PUBLIC_LABEL_PREFIX ||
-        process.env.NEXT_PUBLIC_TENANT_ID)) ||
+        process.env.NEXT_PUBLIC_)) ||
     "WMS";
   return normalizeLabelPrefix(String(raw));
 }

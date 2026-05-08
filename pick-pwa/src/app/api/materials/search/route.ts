@@ -17,7 +17,7 @@ function escapeIlike(s: string): string {
 const MATERIAL_TYPES = ["S", "R", "B", "Q"] as const;
 
 const SELECT_FIELDS =
-  "id,tenant_id,label_type,qr_payload,item_no,color_code,created_at,meta";
+  "id,,label_type,qr_payload,item_no,color_code,created_at,meta";
 
 /** 搜尋已建檔物料（Excel／標籤中心匯入）：料號、品名、說明等 */
 export async function GET(req: Request) {
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const tenant_id =
+  const  =
     normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
     getDefaultLabelPrefix();
   const qRaw = url.searchParams.get("q")?.trim() ?? "";
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "20", 10) || 20),
   );
 
-  if (!tenant_id) {
+  if (!) {
     return NextResponse.json({ error: "無法解析公司識別" }, { status: 400 });
   }
   if (!qRaw) {
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     admin
       .from("label_records")
       .select(SELECT_FIELDS)
-      .eq("tenant_id", tenant_id)
+      .eq("", )
       .in("label_type", [...MATERIAL_TYPES]);
 
   const [byItem, byDesc, byProduct, bySpec] = await Promise.all([

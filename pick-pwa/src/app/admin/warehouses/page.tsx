@@ -12,7 +12,7 @@ const MAX_W = 5;
 
 type WarehouseRow = {
   id: string;
-  tenant_id: string;
+  : string;
   name: string;
   created_at: string;
 };

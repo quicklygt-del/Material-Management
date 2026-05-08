@@ -30,7 +30,7 @@ where (z.slug is null or trim(z.slug) = '')
   and not exists (
         select 1
         from public.storage_zones o
-        where o.tenant_id = z.tenant_id
+        where o. = z.
           and o.slug = concat('zone-', substr(replace(z.id::text, '-', ''), 1, 12))
           and o.id <> z.id
       );
@@ -40,9 +40,9 @@ set slug = concat('zone-', substr(replace(gen_random_uuid()::text, '-', ''), 1, 
 where z.slug is null or trim(z.slug) = '';
 
 create unique index if not exists idx_storage_zones_tenant_slug
-  on public.storage_zones (tenant_id, slug)
+  on public.storage_zones (, slug)
   where slug is not null and length(trim(slug)) > 0;
 
 create unique index if not exists idx_storage_zones_tenant_portal_login
-  on public.storage_zones (tenant_id, portal_login)
+  on public.storage_zones (, portal_login)
   where length(trim(portal_login)) > 0;

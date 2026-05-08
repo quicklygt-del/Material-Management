@@ -578,7 +578,7 @@ export function OtherOperationArea() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tenant_id: companyId,
+            : companyId,
             material_item_no,
             label_record_id: rec.id ?? "",
             operator_name: "現場",
@@ -638,7 +638,7 @@ export function OtherOperationArea() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tenant_id: companyId,
+            : companyId,
             unit_id: tabId,
             label_record_id: rec.id,
             qr_payload: rec.qr_payload,
@@ -852,7 +852,7 @@ export function OtherOperationArea() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: companyId,
+          : companyId,
           label_type: "S",
           qr_payload: itemNo,
           item_no: itemNo,
@@ -898,7 +898,7 @@ export function OtherOperationArea() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: companyId,
+          : companyId,
           label_type: "UNIVERSAL",
           qr_payload: note,
           item_no: note,
@@ -971,7 +971,7 @@ export function OtherOperationArea() {
       const res = await fetch("/api/warehouses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: n, tenant_id: companyId }),
+        body: JSON.stringify({ name: n, : companyId }),
       });
       const json = (await res.json()) as { warehouse?: { id: string } };
       if (!res.ok) return;

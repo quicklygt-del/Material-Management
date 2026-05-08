@@ -63,7 +63,7 @@ export async function aggregatePickingLogQtyByOrders(
       .select("order_no,item_no,actual_qty")
       .in("order_no", slice);
     if (tenantSlug) {
-      q = q.eq("tenant_id", tenantSlug);
+      q = q.eq("", tenantSlug);
     }
     const { data, error } = await q;
     if (error) throw new Error(error.message);

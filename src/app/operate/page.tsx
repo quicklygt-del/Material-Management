@@ -569,7 +569,7 @@ function OperatePageContent() {
         .from("picking_tasks")
         .select("order_no")
         .eq("id", taskIdFromQuery)
-        .eq("tenant_id", getEffectiveTenantSlug())
+        .eq("", getEffectiveTenantSlug())
         .eq("assigned_operator", sessionName)
         .maybeSingle();
       if (pe) {
@@ -605,7 +605,7 @@ function OperatePageContent() {
       let q = supabase
         .from("picking_tasks")
         .select(sel)
-        .eq("tenant_id", tz)
+        .eq("", tz)
         .in("status", ["pending", "in_progress", "completed"])
         .eq("assigned_operator", sessionName)
         .order("created_at", { ascending: false })
@@ -722,12 +722,12 @@ function OperatePageContent() {
     await supabase
       .from("picking_logs")
       .delete()
-      .eq("tenant_id", tz)
+      .eq("", tz)
       .lt("created_at", cutoff);
     await supabase
       .from("picking_tasks")
       .delete()
-      .eq("tenant_id", tz)
+      .eq("", tz)
       .lt("created_at", cutoff);
   }, [supabase]);
 
@@ -881,7 +881,7 @@ function OperatePageContent() {
     variance_note: string | null;
   }) => {
     const row: Record<string, unknown> = {
-      tenant_id: getEffectiveTenantSlug(),
+      : getEffectiveTenantSlug(),
       order_no: String(payload.order_no ?? "").trim() || "UNKNOWN",
       item_no: String(payload.item_no ?? "").trim() || "UNKNOWN",
       actual_qty: Math.min(
@@ -936,7 +936,7 @@ function OperatePageContent() {
 
     if (error) {
       const { error: e2 } = await ins({
-        tenant_id: getEffectiveTenantSlug(),
+        : getEffectiveTenantSlug(),
         order_no: row.order_no,
         item_no: row.item_no,
         actual_qty: row.actual_qty,
@@ -1030,7 +1030,7 @@ function OperatePageContent() {
     const { error: upErr } = await supabase
       .from("picking_tasks")
       .update(updates)
-      .eq("tenant_id", getEffectiveTenantSlug())
+      .eq("", getEffectiveTenantSlug())
       .eq("id", task.id);
     if (upErr) {
       const m = `${upErr.message}（派單狀態更新失敗）`;
@@ -1049,7 +1049,7 @@ function OperatePageContent() {
     const lm = rowOperationMode(task);
     if (lm === "inbound" || lm === "outbound") {
       fireWarehouseLedgerPostMove({
-        tenant_id: getEffectiveTenantSlug(),
+        : getEffectiveTenantSlug(),
         item_no: normItemNo(task.item_no),
         direction: lm,
         qty: Math.floor(qty),

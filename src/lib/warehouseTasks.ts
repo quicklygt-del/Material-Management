@@ -57,7 +57,7 @@ export async function fetchTodayTasksGrouped(
     .select(
       "id,order_no,item_no,required_qty,operation_type,status,picking_logs(actual_qty)",
     )
-    .eq("tenant_id", tz)
+    .eq("", tz)
     .eq("assigned_operator", name)
     .gte("created_at", start)
     .lt("created_at", end)

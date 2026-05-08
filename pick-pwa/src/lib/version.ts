@@ -1,6 +1,6 @@
 /** 顯示於首頁、後台等（作業頁不顯示版號）。Vercel 建置時可帶入 commit 短碼。 */
 
-const LABEL = "v0.22.0";
+const LABEL = "v0.22.2";
 
 function shortSha(): string | undefined {
   const raw = (

@@ -8,7 +8,6 @@ import {
   getSessionUser,
   normalizeRole,
 } from "@/lib/auth";
-import { getEffectiveTenantSlug } from "@/lib/tenantContext";
 import { withTenantParam } from "@/lib/tenantNav";
 import { APP_VERSION } from "@/lib/version";
 
@@ -62,8 +61,6 @@ export default function OperatorWorkbenchPage() {
     router.replace(withTenantParam("/"));
   };
 
-  const tenantId = getEffectiveTenantSlug();
-
   useEffect(() => {
     scanBusyRef.current = scanBusy;
   }, [scanBusy]);
@@ -93,7 +90,6 @@ export default function OperatorWorkbenchPage() {
     setScanMsg(null);
     try {
       const url = new URL("/api/label-records/lookup", window.location.origin);
-      url.searchParams.set("tenant", tenantId);
       url.searchParams.set("qr", qr);
       const r = await fetch(url.toString());
       const j = (await r.json()) as {
@@ -121,7 +117,7 @@ export default function OperatorWorkbenchPage() {
           throw new Error("Database Connection Error");
         }
         throw new Error(
-          /42703|does not exist|tenant_id/i.test(raw)
+          /42703|does not exist/i.test(raw)
             ? "查無此料號，請檢查資料庫設定"
             : raw || "辨識失敗",
         );
@@ -185,6 +181,10 @@ export default function OperatorWorkbenchPage() {
       setScanMsg("請先完成辨識");
       return;
     }
+    if (!orderNo.trim()) {
+      setScanMsg("請輸入單號");
+      return;
+    }
     const quantity = Math.floor(Number(qty || "0"));
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setScanMsg("數量需為大於 0 的整數");
@@ -197,7 +197,6 @@ export default function OperatorWorkbenchPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: tenantId,
           action,
           operator_name: username,
           order_no: orderNo.trim(),
@@ -222,9 +221,13 @@ export default function OperatorWorkbenchPage() {
           ? "領料成功，已更新庫存與交易紀錄。"
           : "退料成功，已更新庫存與交易紀錄。",
       );
+      setDetailOpen(false);
+      setDetail(null);
       setSelectedAction(null);
+      setScanManualInput("");
       setOrderNo("");
       setQty("1");
+      void startQrScan();
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : "庫存異動失敗");
     } finally {
@@ -477,7 +480,7 @@ export default function OperatorWorkbenchPage() {
               <div className="mt-3 space-y-2 rounded-xl border border-slate-200 p-3">
                 <input
                   className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
-                  placeholder="單號（選填）"
+                  placeholder="單號（必填）"
                   value={orderNo}
                   onChange={(e) => setOrderNo(e.target.value)}
                 />
@@ -491,7 +494,7 @@ export default function OperatorWorkbenchPage() {
                 <button
                   type="button"
                   onClick={() => void submitMove()}
-                  disabled={moveBusy}
+                  disabled={moveBusy || !orderNo.trim()}
                   className="h-11 w-full rounded-xl bg-slate-900 text-sm font-black text-white disabled:opacity-50"
                 >
                   {moveBusy

@@ -30,7 +30,7 @@ export async function applyWarehouseLedgerMove(
   const { data: row, error: selErr } = await admin
     .from("warehouse_ledger_stock")
     .select("id,on_hand")
-    .eq("tenant_id", p.tenantId)
+    .eq("", p.tenantId)
     .eq("item_no", p.itemNo)
     .maybeSingle();
 
@@ -44,7 +44,7 @@ export async function applyWarehouseLedgerMove(
     const outboundShort =
       p.direction === "outbound" && Number.isFinite(balanceAfter) && balanceAfter < 0;
     await admin.from("warehouse_ledger_lines").insert({
-      tenant_id: p.tenantId,
+      : p.tenantId,
       item_no: p.itemNo,
       direction: p.direction,
       qty_delta: qty,
@@ -66,7 +66,7 @@ export async function applyWarehouseLedgerMove(
     const seedName = (p.seedItemName ?? "").trim().slice(0, 500);
     const seedSpec = (p.seedSpec ?? "").trim().slice(0, 500);
     const { error: insErr } = await admin.from("warehouse_ledger_stock").insert({
-      tenant_id: p.tenantId,
+      : p.tenantId,
       item_no: p.itemNo,
       item_name: seedName,
       spec: seedSpec,

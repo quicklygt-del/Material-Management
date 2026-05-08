@@ -18,7 +18,7 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** 與 DB label_records.tenant_id、QR 第一段一致；核心模式固定 CARB。 */
+/** 與 DB label_records.、QR 第一段一致；核心模式固定 CARB。 */
 export function getDefaultLabelPrefix(): string {
   return "CARB";
 }

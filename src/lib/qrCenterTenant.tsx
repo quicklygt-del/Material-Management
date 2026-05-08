@@ -8,7 +8,7 @@ import {
 } from "react";
 import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
 
-/** 單一公司模式：一律使用環境變數預設前綴（與 QR／DB tenant_id 對齊） */
+/** 單一公司模式：一律使用環境變數預設前綴（與 QR／DB  對齊） */
 type Ctx = {
   tenantId: string;
   /** 保留呼叫端相容；已不會改變公司識別 */

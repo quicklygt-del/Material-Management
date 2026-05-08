@@ -3,14 +3,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** 該標籤於此管理單位之下，異動前結餘 */
 export async function getPreviousLabelBalance(
   admin: SupabaseClient,
-  tenant_id: string,
+  : string,
   unit_id: string,
   label_record_id: string,
 ): Promise<number> {
   const { data: last, error: e1 } = await admin
     .from("universal_ledger_records")
     .select("balance_after")
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("unit_id", unit_id)
     .eq("label_record_id", label_record_id)
     .order("created_at", { ascending: false })
@@ -24,7 +24,7 @@ export async function getPreviousLabelBalance(
   const { data: deltas, error: e2 } = await admin
     .from("universal_ledger_records")
     .select("quantity_delta")
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("unit_id", unit_id)
     .eq("label_record_id", label_record_id);
 

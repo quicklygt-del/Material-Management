@@ -19,14 +19,14 @@ export async function GET(req: Request) {
     return missingServiceRoleResponse();
   }
   const url = new URL(req.url);
-  const tenant_id =
+  const  =
     normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
     getDefaultLabelPrefix();
 
   const { data, error } = await admin
     .from("label_print_templates")
-    .select("id,tenant_id,name,field_definitions,created_at,updated_at")
-    .eq("tenant_id", tenant_id)
+    .select("id,,name,field_definitions,created_at,updated_at")
+    .eq("", )
     .order("name", { ascending: true });
 
   if (error) {
@@ -57,8 +57,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON 格式錯誤" }, { status: 400 });
   }
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+  const  =
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const name = String(b.name ?? "").trim();
   if (!name) {
     return NextResponse.json({ error: "請輸入範本名稱" }, { status: 400 });
@@ -77,12 +77,12 @@ export async function POST(req: Request) {
   const { data, error } = await admin
     .from("label_print_templates")
     .insert({
-      tenant_id,
+      ,
       name: name.slice(0, 120),
       field_definitions: norm,
       updated_at: new Date().toISOString(),
     })
-    .select("id,tenant_id,name,field_definitions,created_at,updated_at")
+    .select("id,,name,field_definitions,created_at,updated_at")
     .single();
 
   if (error) {
@@ -112,8 +112,8 @@ export async function PATCH(req: Request) {
   }
   const b = body as Record<string, unknown>;
   const id = String(b.id ?? "").trim();
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+  const  =
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   if (!id) {
     return NextResponse.json({ error: "缺少 id" }, { status: 400 });
   }
@@ -150,8 +150,8 @@ export async function PATCH(req: Request) {
     .from("label_print_templates")
     .update(patch)
     .eq("id", id)
-    .eq("tenant_id", tenant_id)
-    .select("id,tenant_id,name,field_definitions,created_at,updated_at")
+    .eq("", )
+    .select("id,,name,field_definitions,created_at,updated_at")
     .single();
 
   if (error) {
@@ -171,7 +171,7 @@ export async function DELETE(req: Request) {
   }
   const url = new URL(req.url);
   const id = url.searchParams.get("id")?.trim();
-  const tenant_id =
+  const  =
     normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
     getDefaultLabelPrefix();
   if (!id) {
@@ -182,7 +182,7 @@ export async function DELETE(req: Request) {
     .from("label_print_templates")
     .delete()
     .eq("id", id)
-    .eq("tenant_id", tenant_id);
+    .eq("", );
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

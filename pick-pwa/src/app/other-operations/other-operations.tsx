@@ -6,11 +6,9 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import { APP_BRAND_TAGLINE } from "@/components/AppBrandHeader";
-import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
 import { withTenantParam } from "@/lib/tenantNav";
 import { APP_VERSION } from "@/lib/version";
 
@@ -20,7 +18,6 @@ function OtherOperationsLoginInner() {
   const err = sp.get("err");
   const slugHint = sp.get("slug")?.trim();
 
-  const tenant = useMemo(() => getDefaultLabelPrefix(), []);
   const [portalLogin, setPortalLogin] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -64,7 +61,6 @@ function OtherOperationsLoginInner() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          tenant_id: tenant,
           portal_login: portalLogin.trim(),
           password,
         }),
@@ -83,7 +79,7 @@ function OtherOperationsLoginInner() {
     } finally {
       setBusy(false);
     }
-  }, [password, portalLogin, router, tenant]);
+  }, [password, portalLogin, router]);
 
   return (
     <main className="flex min-h-[100dvh] flex-col bg-gradient-to-b from-emerald-50 to-white px-4 py-8">

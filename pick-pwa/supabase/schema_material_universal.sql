@@ -1,7 +1,7 @@
 -- 物料主軸異動（與 label_records / 料號對齊；QR 內容即為料號時以 material_item_no 彙總）
 create table if not exists public.material_transactions (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   material_item_no text not null,
   label_record_id uuid references public.label_records (id) on delete set null,
   action_type text not null check (action_type in ('inbound', 'pick', 'stocktake')),
@@ -12,7 +12,7 @@ create table if not exists public.material_transactions (
 );
 
 create index if not exists idx_material_tx_tenant_item
-  on public.material_transactions (tenant_id, material_item_no);
+  on public.material_transactions (, material_item_no);
 create index if not exists idx_material_tx_label
   on public.material_transactions (label_record_id);
 
@@ -27,7 +27,7 @@ grant select, insert, update, delete on public.material_transactions to service_
 -- 單位萬用帳本異動（必須關聯 storage_zones 分頁）
 create table if not exists public.universal_ledger_records (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   unit_id uuid not null references public.storage_zones (id) on delete cascade,
   label_record_id uuid references public.label_records (id) on delete set null,
   qr_payload text not null,
@@ -39,7 +39,7 @@ create table if not exists public.universal_ledger_records (
 );
 
 create index if not exists idx_universal_ledger_tenant_unit
-  on public.universal_ledger_records (tenant_id, unit_id);
+  on public.universal_ledger_records (, unit_id);
 create index if not exists idx_universal_ledger_label_unit
   on public.universal_ledger_records (label_record_id, unit_id);
 

@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const LABEL_SELECT =
-  "id,tenant_id,label_type,qr_payload,item_no,color_code,operator_id,created_at,meta,warehouse_id,manageable_asset";
+  "id,,label_type,qr_payload,item_no,color_code,operator_id,created_at,meta,warehouse_id,manageable_asset";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,9 +25,9 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const fromQuery = normalizeLabelPrefix(url.searchParams.get("tenant") ?? "");
-  const tenant_id = fromQuery || getDefaultLabelPrefix();
+  const  = fromQuery || getDefaultLabelPrefix();
   const qr_in = url.searchParams.get("qr")?.trim() ?? "";
-  if (!tenant_id) {
+  if (!) {
     return NextResponse.json({ error: "無法解析公司識別" }, { status: 400 });
   }
   if (!qr_in) {
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
   const { data: byPayload, error: e1 } = await admin
     .from("label_records")
     .select(LABEL_SELECT)
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .in("qr_payload", tryPayloads)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
     const { data: byItem, error: e2 } = await admin
       .from("label_records")
       .select(LABEL_SELECT)
-      .eq("tenant_id", tenant_id)
+      .eq("", )
       .in("item_no", tryPayloads)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -84,7 +84,7 @@ export async function GET(req: Request) {
       const { data: byId, error: e3 } = await admin
         .from("label_records")
         .select(LABEL_SELECT)
-        .eq("tenant_id", tenant_id)
+        .eq("", )
         .eq("id", c)
         .maybeSingle();
       if (e3) {
@@ -103,7 +103,7 @@ export async function GET(req: Request) {
   if (!row) {
     return NextResponse.json({
       found: false,
-      tenant_id,
+      ,
       qr_payload: qr_in,
       tried: tryPayloads.slice(0, 8),
     });

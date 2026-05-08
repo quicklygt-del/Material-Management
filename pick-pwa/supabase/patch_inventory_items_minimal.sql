@@ -3,18 +3,18 @@
 
 create table if not exists public.inventory_items (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   item_code text not null,
   item_name text not null default '',
   spec text not null default '',
   meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint inventory_items_tenant_item_unique unique (tenant_id, item_code)
+  constraint inventory_items_tenant_item_unique unique (, item_code)
 );
 
 create index if not exists idx_inventory_items_tenant_code
-  on public.inventory_items (tenant_id, lower(item_code));
+  on public.inventory_items (, lower(item_code));
 
 alter table public.inventory_items enable row level security;
 drop policy if exists inventory_items_all on public.inventory_items;

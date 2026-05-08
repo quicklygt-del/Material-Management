@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   const b = body as Record<string, unknown>;
   const tenantId =
-    normalizeLabelPrefix(String(b.tenant_id ?? getDefaultLabelPrefix())) ||
+    normalizeLabelPrefix(String(b. ?? getDefaultLabelPrefix())) ||
     getDefaultLabelPrefix();
 
   const denied = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     const { data: hits, error } = await admin
       .from("warehouse_ledger_stock")
       .select("item_no")
-      .eq("tenant_id", tenantId)
+      .eq("", tenantId)
       .in("item_no", slice);
 
     if (error) {
@@ -71,6 +71,6 @@ export async function POST(req: Request) {
     ok: missing.length === 0,
     missing,
     checked: itemNos.length,
-    tenant_id: tenantId,
+    : tenantId,
   });
 }

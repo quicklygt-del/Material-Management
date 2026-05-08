@@ -18,12 +18,12 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const tenant_id =
+  const  =
     normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
     getDefaultLabelPrefix();
   const unit_id = url.searchParams.get("unit_id")?.trim();
 
-  if (!tenant_id || !unit_id) {
+  if (! || !unit_id) {
     return NextResponse.json(
       { error: "缺少 tenant 或 unit_id" },
       { status: 400 },
@@ -32,13 +32,13 @@ export async function GET(req: Request) {
 
   const { data: zone, error: zErr } = await admin
     .from("storage_zones")
-    .select("id,tenant_id")
+    .select("id,")
     .eq("id", unit_id)
     .maybeSingle();
   if (zErr || !zone) {
     return NextResponse.json({ error: "管理單位不存在" }, { status: 400 });
   }
-  if (normalizeLabelPrefix(String(zone.tenant_id)) !== tenant_id) {
+  if (normalizeLabelPrefix(String(zone.)) !== ) {
     return NextResponse.json({ error: "單位與公司識別不符" }, { status: 403 });
   }
 
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
     .select(
       "id,created_at,summary,quantity_delta,balance_after,action_type,operator_name,qr_payload,label_record_id",
     )
-    .eq("tenant_id", tenant_id)
+    .eq("", )
     .eq("unit_id", unit_id)
     .order("created_at", { ascending: true });
 

@@ -1,5 +1,5 @@
 -- 標籤中心：多租戶隔離（請於 schema_labels.sql 之後執行）
--- 1) 帳號綁定 company_id（與 label_records.tenant_id / QR 第一段一致）
+-- 1) 帳號綁定 company_id（與 label_records. / QR 第一段一致）
 -- 2) 撤銷 anon／authenticated 對 label_records 的直接存取；改由後端 API（service_role）寫入
 
 alter table public.app_users
@@ -8,8 +8,8 @@ alter table public.app_users
 alter table public.warehouse_operators
   add column if not exists company_id text not null default 'CARB';
 
-comment on column public.app_users.company_id is '企業識別碼，與標籤 QR 第一段、label_records.tenant_id 一致';
-comment on column public.warehouse_operators.company_id is '企業識別碼，與標籤 QR 第一段、label_records.tenant_id 一致';
+comment on column public.app_users.company_id is '企業識別碼，與標籤 QR 第一段、label_records. 一致';
+comment on column public.warehouse_operators.company_id is '企業識別碼，與標籤 QR 第一段、label_records. 一致';
 
 -- 可依實際租戶更新預設（下列為範例）
 -- update public.app_users set company_id = 'RMC' where username = 'admin';

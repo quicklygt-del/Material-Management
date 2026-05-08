@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
   const b = body as Record<string, unknown>;
   const tenantId =
-    normalizeLabelPrefix(String(b.tenant_id ?? getDefaultLabelPrefix())) ||
+    normalizeLabelPrefix(String(b. ?? getDefaultLabelPrefix())) ||
     getDefaultLabelPrefix();
   const blocked = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
   if (blocked) return blocked;

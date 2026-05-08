@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     .select("id,item_no,item_name,spec,on_hand,attrs,updated_at", {
       count: "exact",
     })
-    .eq("tenant_id", tenantId)
+    .eq("", tenantId)
     .order("item_no", { ascending: true })
     .range(offset, offset + limit - 1);
 
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json({
-    tenant_id: tenantId,
+    : tenantId,
     items: rows ?? [],
     count: count ?? 0,
     limit,

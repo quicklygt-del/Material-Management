@@ -1,5 +1,5 @@
 -- Multi-tenant SaaS：租戶主檔、派單／日誌 tenant 隔離、平台標籤公版（Super Admin）
--- 與現有 label_records.tenant_id / company_id 對齊；執行前請備份。
+-- 與現有 label_records. / company_id 對齊；執行前請備份。
 
 -- ── 租戶主檔（tenant_code：000–999；tenant_slug：與 QR 前綴／company_id 一致）──
 create table if not exists public.tenants (
@@ -32,49 +32,49 @@ insert into public.tenants (tenant_code, tenant_slug, company_name, status, feat
 select '001', 'CARB', '預設租戶 CARB', 'active', true
 where not exists (select 1 from public.tenants t where t.tenant_slug = 'CARB');
 
--- ── picking_tasks / picking_logs：tenant_id（與 tenant_slug 字串一致）──
-alter table public.picking_tasks add column if not exists tenant_id text not null default '';
+-- ── picking_tasks / picking_logs：（與 tenant_slug 字串一致）──
+alter table public.picking_tasks add column if not exists  text not null default '';
 
 update public.picking_tasks pt
-set tenant_id = upper(
+set  = upper(
   regexp_replace(trim(coalesce(wo.company_id, '')), '[^A-Za-z0-9]', '', 'g')
 )
 from public.warehouse_operators wo
 where trim(coalesce(pt.assigned_operator, '')) <> ''
   and trim(coalesce(pt.assigned_operator, '')) = trim(wo.name)
-  and (pt.tenant_id is null or trim(pt.tenant_id) = '')
+  and (pt. is null or trim(pt.) = '')
   and length(regexp_replace(trim(coalesce(wo.company_id, '')), '[^A-Za-z0-9]', '', 'g')) > 0;
 
 update public.picking_tasks
-set tenant_id = 'WMS'
-where tenant_id is null or trim(tenant_id) = '';
+set  = 'WMS'
+where  is null or trim() = '';
 
-alter table public.picking_logs add column if not exists tenant_id text not null default '';
+alter table public.picking_logs add column if not exists  text not null default '';
 
 update public.picking_logs pl
-set tenant_id = coalesce(pt.tenant_id, 'WMS')
+set  = coalesce(pt., 'WMS')
 from public.picking_tasks pt
 where pl.task_id is not null
   and pl.task_id = pt.id
-  and (pl.tenant_id is null or trim(pl.tenant_id) = '');
+  and (pl. is null or trim(pl.) = '');
 
 update public.picking_logs
-set tenant_id = 'WMS'
-where tenant_id is null or trim(tenant_id) = '';
+set  = 'WMS'
+where  is null or trim() = '';
 
 drop index if exists public.idx_picking_tasks_order_item;
 create unique index if not exists idx_picking_tasks_tenant_order_item
-  on public.picking_tasks (tenant_id, order_no, item_no);
+  on public.picking_tasks (, order_no, item_no);
 
 create index if not exists idx_picking_tasks_tenant_created
-  on public.picking_tasks (tenant_id, created_at desc);
+  on public.picking_tasks (, created_at desc);
 create index if not exists idx_picking_tasks_tenant_status_assigned_operator
-  on public.picking_tasks (tenant_id, status, assigned_operator);
+  on public.picking_tasks (, status, assigned_operator);
 
 create index if not exists idx_picking_logs_tenant_created
-  on public.picking_logs (tenant_id, created_at desc);
+  on public.picking_logs (, created_at desc);
 create index if not exists idx_picking_logs_tenant_order
-  on public.picking_logs (tenant_id, order_no);
+  on public.picking_logs (, order_no);
 
 -- ── Super Admin：平台級標籤 Excel 比對公版 ──
 create table if not exists public.platform_label_sheet_templates (

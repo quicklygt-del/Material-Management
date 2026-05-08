@@ -21,7 +21,7 @@ type UnitCtxLite = {
   unit_id: string;
   slug: string;
   name: string;
-  tenant_id: string;
+  : string;
   label_template_id: string | null;
 };
 
@@ -117,7 +117,7 @@ export default function UnitLabelPrintPage() {
         unit_id: String(j.unit_id ?? ""),
         slug: String(j.slug ?? ""),
         name: String(j.name ?? ""),
-        tenant_id: String(j.tenant_id ?? ""),
+        : String(j. ?? ""),
         label_template_id: j.label_template_id
           ? String(j.label_template_id)
           : null,
@@ -223,7 +223,7 @@ export default function UnitLabelPrintPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: ctx.tenant_id,
+          : ctx.,
           label_type: "UNIVERSAL",
           qr_payload: trimmed,
           item_no: itemNo,

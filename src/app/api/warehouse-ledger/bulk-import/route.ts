@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 
   const b = body as Record<string, unknown>;
   const tenantId =
-    normalizeLabelPrefix(String(b.tenant_id ?? getDefaultLabelPrefix())) ||
+    normalizeLabelPrefix(String(b. ?? getDefaultLabelPrefix())) ||
     getDefaultLabelPrefix();
 
   const denied = await assertTenantWarehouseLedgerAllowed(admin, tenantId);
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
   const iso = new Date().toISOString();
   type UpsertRow = {
-    tenant_id: string;
+    : string;
     item_no: string;
     item_name: string;
     spec: string;
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     const cur =
       acc.get(item_no) ??
       ({
-        tenant_id: tenantId,
+        : tenantId,
         item_no,
         item_name: "",
         spec: "",
@@ -129,12 +129,12 @@ export async function POST(req: Request) {
   }
 
   const { error } = await admin.from("warehouse_ledger_stock").upsert(payload, {
-    onConflict: "tenant_id,item_no",
+    onConflict: ",item_no",
   });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, upserted: payload.length, tenant_id: tenantId });
+  return NextResponse.json({ ok: true, upserted: payload.length, : tenantId });
 }

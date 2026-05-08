@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   const { data: row, error } = await admin
     .from("warehouse_ledger_stock")
     .select("on_hand")
-    .eq("tenant_id", tenantId)
+    .eq("", tenantId)
     .eq("item_no", itemNo)
     .maybeSingle();
 
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       found: false,
       on_hand: 0,
-      tenant_id: tenantId,
+      : tenantId,
       item_no: itemNo,
     });
   }
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     found: true,
     on_hand: Number(row.on_hand) || 0,
-    tenant_id: tenantId,
+    : tenantId,
     item_no: itemNo,
   });
 }

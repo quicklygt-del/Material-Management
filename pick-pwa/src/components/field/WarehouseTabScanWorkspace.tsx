@@ -204,7 +204,7 @@ export function WarehouseTabScanWorkspace({
       const res = await fetch("/api/warehouses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, tenant_id: companyId }),
+        body: JSON.stringify({ name, : companyId }),
       });
       const json = (await res.json()) as {
         warehouse?: { id: string };
@@ -446,7 +446,7 @@ export function WarehouseTabScanWorkspace({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            tenant_id: companyId,
+            : companyId,
             label_record_id: record.id ?? "",
             qr_payload: record.qr_payload,
             warehouse_id: tabWarehouseId,

@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     .select(
       "id,direction,qty_delta,balance_after,shortage_forced,ref,created_at",
     )
-    .eq("tenant_id", tenantId)
+    .eq("", tenantId)
     .eq("item_no", itemNo)
     .order("created_at", { ascending: false })
     .limit(limit);

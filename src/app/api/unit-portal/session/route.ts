@@ -31,7 +31,7 @@ export async function GET() {
   const tenant = normalizeLabelPrefix(v.tenant);
   const sel = await admin
     .from("storage_zones")
-    .select("id,name,slug,tenant_id,portal_login,label_template_id")
+    .select("id,name,slug,,portal_login,label_template_id")
     .eq("id", v.unitId)
     .maybeSingle();
 
@@ -41,7 +41,7 @@ export async function GET() {
   if (selErr?.message && /label_template_id|42703|column/i.test(selErr.message)) {
     const fb = await admin
       .from("storage_zones")
-      .select("id,name,slug,tenant_id,portal_login")
+      .select("id,name,slug,,portal_login")
       .eq("id", v.unitId)
       .maybeSingle();
     z = fb.data as typeof z;
@@ -52,7 +52,7 @@ export async function GET() {
     return NextResponse.json({ error: "單位不存在" }, { status: 401 });
   }
   const zslug = String(z.slug ?? "").trim();
-  const ztenant = normalizeLabelPrefix(String(z.tenant_id));
+  const ztenant = normalizeLabelPrefix(String(z.));
   if (zslug !== v.slug || ztenant !== tenant) {
     return NextResponse.json({ error: "身分與資料庫不符" }, { status: 401 });
   }
@@ -70,7 +70,7 @@ export async function GET() {
       .from("label_print_templates")
       .select("id,name,field_definitions")
       .eq("id", tid)
-      .eq("tenant_id", normalizeLabelPrefix(String(z.tenant_id)))
+      .eq("", normalizeLabelPrefix(String(z.)))
       .maybeSingle();
     const row = tr.data as
       | { id?: string; name?: string; field_definitions?: unknown }
@@ -96,7 +96,7 @@ export async function GET() {
     unit_id: v.unitId,
     slug: v.slug,
     name: String(z.name ?? "").trim(),
-    tenant_id: tenant,
+    : tenant,
     portal_login: String(z.portal_login ?? "").trim(),
     label_template_id: tid || null,
     label_template: label_template

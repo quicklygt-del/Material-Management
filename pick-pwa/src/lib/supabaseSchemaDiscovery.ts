@@ -119,9 +119,9 @@ export function pickItemMatchColumns(cols: Set<string>): string[] {
   return keys.length > 0 ? keys : [];
 }
 
-export function pickScopeColumns(cols: Set<string>): ("tenant_id" | "company_id")[] {
-  const out: ("tenant_id" | "company_id")[] = [];
-  if (cols.has("tenant_id")) out.push("tenant_id");
+export function pickScopeColumns(cols: Set<string>): ("" | "company_id")[] {
+  const out: ("" | "company_id")[] = [];
+  if (cols.has("")) out.push("");
   if (cols.has("company_id")) out.push("company_id");
   return out;
 }

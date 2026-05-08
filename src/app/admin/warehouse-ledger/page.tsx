@@ -183,7 +183,7 @@ export default function WarehouseLedgerAdminPage() {
         const res = await fetch("/api/warehouse-ledger/bulk-import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenant_id: tenant, rows: part }),
+          body: JSON.stringify({ : tenant, rows: part }),
         });
         const json = (await res.json()) as { error?: string; upserted?: number };
         if (!res.ok) throw new Error(json.error || "上傳失敗");

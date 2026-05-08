@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     const { data: rows, error } = await admin
       .from("warehouse_ledger_stock")
       .select("item_no,item_name,spec,on_hand,attrs,updated_at")
-      .eq("tenant_id", tenantId)
+      .eq("", tenantId)
       .order("item_no", { ascending: true });
 
     if (error) {
@@ -71,7 +71,7 @@ export async function GET(req: Request) {
     .select(
       "created_at,direction,qty_delta,balance_after,shortage_forced,item_no,ref",
     )
-    .eq("tenant_id", tenantId)
+    .eq("", tenantId)
     .gte("created_at", sinceIso)
     .order("created_at", { ascending: true })
     .limit(100_000);

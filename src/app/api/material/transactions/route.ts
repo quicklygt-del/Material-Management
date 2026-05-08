@@ -26,8 +26,8 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenant_id =
-    normalizeLabelPrefix(String(b.tenant_id ?? "")) || getDefaultLabelPrefix();
+  const  =
+    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const material_item_no = String(b.material_item_no ?? "").trim();
   const label_record_id = String(b.label_record_id ?? "").trim();
   const operator_name = String(b.operator_name ?? "現場").trim() || "現場";
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       ? qtyRaw
       : Number.parseInt(String(qtyRaw ?? ""), 10);
 
-  if (!tenant_id || !material_item_no) {
+  if (! || !material_item_no) {
     return NextResponse.json({ error: "缺少必填欄位" }, { status: 400 });
   }
   if (!["inbound", "pick", "stocktake"].includes(action_type)) {
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
   const { data: inserted, error: insErr } = await admin
     .from("material_transactions")
     .insert({
-      tenant_id,
+      ,
       material_item_no,
       label_record_id: label_record_id || null,
       action_type,

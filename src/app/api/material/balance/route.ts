@@ -33,7 +33,7 @@ export async function GET(req: Request) {
   const { data, error } = await admin
     .from("material_transactions")
     .select("quantity_delta")
-    .eq("tenant_id", tenantRaw)
+    .eq("", tenantRaw)
     .eq("material_item_no", material_item_no);
 
   if (error) {

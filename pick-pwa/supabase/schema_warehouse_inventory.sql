@@ -4,12 +4,12 @@
 
 create table if not exists public.storage_zones (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   name text not null,
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_storage_zones_tenant on public.storage_zones (tenant_id);
+create index if not exists idx_storage_zones_tenant on public.storage_zones ();
 
 comment on table public.storage_zones is '虛擬倉／管理區；每租戶最多 5 筆（由應用程式限制）';
 
@@ -24,7 +24,7 @@ comment on column public.label_records.manageable_asset is '是否為可執行�
 
 create table if not exists public.inventory_logs (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   label_record_id uuid references public.label_records (id) on delete set null,
   qr_payload text not null,
   warehouse_id uuid not null references public.storage_zones (id) on delete restrict,
@@ -36,7 +36,7 @@ create table if not exists public.inventory_logs (
 );
 
 create index if not exists idx_inventory_logs_tenant_created
-  on public.inventory_logs (tenant_id, created_at desc);
+  on public.inventory_logs (, created_at desc);
 create index if not exists idx_inventory_logs_label
   on public.inventory_logs (label_record_id);
 

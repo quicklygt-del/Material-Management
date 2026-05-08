@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const nowIso = new Date().toISOString();
   const { data: zones, error } = await admin
     .from("storage_zones")
-    .select("id,name,slug,tenant_id,invite_token,invite_expires_at")
+    .select("id,name,slug,,invite_token,invite_expires_at")
     .eq("invite_token", raw);
 
   if (error) {
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     {
       slug: String(row.slug),
       tenant: normalizeLabelPrefix(
-        String(row.tenant_id) || getDefaultLabelPrefix(),
+        String(row.) || getDefaultLabelPrefix(),
       ),
       name: String(row.name ?? "").trim() || "單位",
     },

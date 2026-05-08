@@ -63,7 +63,7 @@ function OtherOperationsLoginInner() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          tenant_id: tenant,
+          : tenant,
           portal_login: portalLogin.trim(),
           password,
         }),

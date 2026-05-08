@@ -93,7 +93,7 @@ export default function OtherOperationsAdminPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tenant_id: companyId,
+          : companyId,
           name: newName.trim(),
           slug: newSlug.trim() || undefined,
           portal_login: newLogin.trim(),
@@ -125,7 +125,7 @@ export default function OtherOperationsAdminPage() {
       const res = await fetch("/api/warehouses", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, tenant_id: companyId, ...patch }),
+        body: JSON.stringify({ id, : companyId, ...patch }),
       });
       const j = (await res.json()) as { error?: string; invite_token?: string };
       if (!res.ok) throw new Error(j.error ?? "更新失敗");
@@ -158,7 +158,7 @@ export default function OtherOperationsAdminPage() {
       const res = await fetch("/api/universal-ledger/purge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenant_id: companyId, unit_id: unitId }),
+        body: JSON.stringify({ : companyId, unit_id: unitId }),
       });
       const j = (await res.json()) as {
         error?: string;

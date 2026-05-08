@@ -1,10 +1,10 @@
-/** 企業識別（tenant）— 與 DB label_records.tenant_id 對齊；預設可由環境覆寫 */
+/** 企業識別（tenant）— 與 DB label_records. 對齊；預設可由環境覆寫 */
 
 const STORAGE_KEY = "label-center-tenant-id";
 
 export function getDefaultTenantFromEnv(): string {
-  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_TENANT_ID) {
-    return String(process.env.NEXT_PUBLIC_TENANT_ID).trim();
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_) {
+    return String(process.env.NEXT_PUBLIC_).trim();
   }
   return "DEMO";
 }

@@ -1,9 +1,9 @@
--- 倉儲總帳（料號總量＋異動日誌）— 與標籤前綴／tenant_id 對齊
+-- 倉儲總帳（料號總量＋異動日誌）— 與標籤前綴／ 對齊
 -- 請於 Supabase SQL Editor 與現有環境合併執行
 
 create table if not exists public.warehouse_ledger_stock (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   item_no text not null,
   item_name text not null default '',
   spec text not null default '',
@@ -15,20 +15,20 @@ create table if not exists public.warehouse_ledger_stock (
   constraint warehouse_ledger_stock_on_hand_finite check (
     on_hand >= -2147483648 and on_hand <= 2147483647
   ),
-  constraint warehouse_ledger_stock_tenant_item_unique unique (tenant_id, item_no)
+  constraint warehouse_ledger_stock_tenant_item_unique unique (, item_no)
 );
 
 comment on table public.warehouse_ledger_stock is '倉儲總帳主檔：現有總量（ERP 對帳基底）';
 
 create index if not exists idx_warehouse_ledger_stock_tenant
-  on public.warehouse_ledger_stock (tenant_id);
+  on public.warehouse_ledger_stock ();
 
 create index if not exists idx_warehouse_ledger_stock_item_no_ci
-  on public.warehouse_ledger_stock (tenant_id, lower(item_no));
+  on public.warehouse_ledger_stock (, lower(item_no));
 
 create table if not exists public.warehouse_ledger_lines (
   id uuid primary key default gen_random_uuid(),
-  tenant_id text not null,
+   text not null,
   item_no text not null,
   direction text not null check (direction in ('inbound', 'outbound')),
   /** 變動量（正值；语义由 direction 決定出入） */
@@ -43,9 +43,9 @@ create table if not exists public.warehouse_ledger_lines (
 comment on table public.warehouse_ledger_lines is '倉儲總帳異動日誌';
 
 create index if not exists idx_warehouse_ledger_lines_tenant_item
-  on public.warehouse_ledger_lines (tenant_id, item_no);
+  on public.warehouse_ledger_lines (, item_no);
 create index if not exists idx_warehouse_ledger_lines_created
-  on public.warehouse_ledger_lines (tenant_id, created_at desc);
+  on public.warehouse_ledger_lines (, created_at desc);
 
 alter table public.warehouse_ledger_stock enable row level security;
 drop policy if exists warehouse_ledger_stock_all on public.warehouse_ledger_stock;
