@@ -117,6 +117,9 @@ export default function OperatorWorkbenchPage() {
       };
       if (!r.ok) {
         const raw = j.error ?? "";
+        if (/Database Connection Error/i.test(raw)) {
+          throw new Error("Database Connection Error");
+        }
         throw new Error(
           /42703|does not exist|tenant_id/i.test(raw)
             ? "查無此料號，請檢查資料庫設定"
@@ -161,9 +164,11 @@ export default function OperatorWorkbenchPage() {
       setDetail(null);
       const m = e instanceof Error ? e.message : "辨識失敗";
       setScanMsg(
-        /42703|does not exist|failed/i.test(m)
-          ? "查無此料號，請檢查資料庫設定"
-          : m,
+        m === "Database Connection Error"
+          ? "資料庫連線失敗（Database Connection Error）。請確認 SUPABASE_SERVICE_ROLE_KEY 與 Supabase 專案設定。"
+          : /42703|does not exist|failed/i.test(m)
+            ? "查無此料號，請檢查資料庫設定"
+            : m,
       );
     } finally {
       setScanBusy(false);

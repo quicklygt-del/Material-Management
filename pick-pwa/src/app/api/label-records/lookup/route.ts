@@ -6,28 +6,74 @@ import {
 } from "@/lib/labelEncoding";
 import { buildQrLookupCandidates } from "@/lib/qrLookupNormalize";
 import {
+  fetchPublicTableColumns,
+  pickItemMatchColumns,
+  pickNumericQtyColumn,
+  pickScopeColumns,
+  selectExistingColumns,
+} from "@/lib/supabaseSchemaDiscovery";
+import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
-/** 新庫：含 tenant_id（僅選必定存在之欄，避免舊庫缺欄造成 PostgREST 解析失敗） */
 const LABEL_SELECT_FULL =
   "id,tenant_id,label_type,qr_payload,item_no,color_code,operator_id,created_at,meta";
 
-/** 舊庫可能無 tenant_id 欄：SELECT 時勿含 tenant_id */
 const LABEL_SELECT_LEGACY =
   "id,label_type,qr_payload,item_no,color_code,operator_id,created_at,meta";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const LEDGER_SELECT_CANDIDATES = [
+  "id",
+  "tenant_id",
+  "company_id",
+  "item_no",
+  "item_code",
+  "item_name",
+  "spec",
+  "stock_quantity",
+  "on_hand",
+  "updated_at",
+  "created_at",
+];
+
+const INV_SELECT_CANDIDATES = [
+  "id",
+  "tenant_id",
+  "company_id",
+  "item_code",
+  "item_no",
+  "item_name",
+  "spec",
+  "meta",
+];
+
+function dbConnJson(status: number, detail?: string) {
+  return NextResponse.json(
+    {
+      error: "Database Connection Error",
+      ...(detail ? { detail } : {}),
+    },
+    { status },
+  );
+}
+
 function scopeMissingColumn(msg: string): boolean {
   return /42703|does not exist|tenant_id|company_id/i.test(msg);
 }
 
 type ScopeCol = "tenant_id" | "company_id";
+
+function orderColumn(cols: Set<string>): string | null {
+  if (cols.has("updated_at")) return "updated_at";
+  if (cols.has("created_at")) return "created_at";
+  return null;
+}
 
 async function pickLabelRow(
   admin: SupabaseClient,
@@ -99,62 +145,144 @@ async function pickLabelRow(
   return { row: null, error: null };
 }
 
-async function fetchLedgerStockRow(
+async function queryLedgerByCandidate(
   admin: SupabaseClient,
   tenant_id: string,
-  item_no: string,
+  candidate: string,
+  colSet: Set<string>,
 ): Promise<{
-  item_name: string;
-  spec: string;
-  on_hand: number;
-} | null> {
-  const normItem = item_no.replace(/\uFEFF/g, "").trim();
-  if (!normItem) return null;
-
-  const tryScopes = [
-    async () =>
-      admin
-        .from("warehouse_ledger_stock")
-        .select("item_name,spec,stock_quantity,on_hand")
-        .eq("tenant_id", tenant_id)
-        .eq("item_no", normItem)
-        .order("updated_at", { ascending: false })
-        .limit(1),
-    async () =>
-      admin
-        .from("warehouse_ledger_stock")
-        .select("item_name,spec,stock_quantity,on_hand")
-        .eq("company_id", tenant_id)
-        .eq("item_no", normItem)
-        .order("updated_at", { ascending: false })
-        .limit(1),
-    async () =>
-      admin
-        .from("warehouse_ledger_stock")
-        .select("item_name,spec,stock_quantity,on_hand")
-        .eq("item_no", normItem)
-        .order("updated_at", { ascending: false })
-        .limit(1),
-  ];
-
-  for (const run of tryScopes) {
-    const res = await run();
-    if (res.error) {
-      if (scopeMissingColumn(res.error.message)) continue;
-      return null;
-    }
-    const data = (res.data?.[0] ?? null) as Record<string, unknown> | null;
-    if (!data) continue;
-    const onHand =
-      Number(data.stock_quantity ?? data.on_hand ?? 0) || 0;
+  row: Record<string, unknown> | null;
+  error: string | null;
+  fatal: boolean;
+}> {
+  const itemCols = pickItemMatchColumns(colSet);
+  if (itemCols.length === 0) {
     return {
-      item_name: String(data.item_name ?? "").trim(),
-      spec: String(data.spec ?? "").trim(),
-      on_hand: onHand,
+      row: null,
+      error: "warehouse_ledger_stock 缺少 item_code / item_no 欄位",
+      fatal: true,
     };
   }
 
-  return null;
+  const selectStr = selectExistingColumns(colSet, LEDGER_SELECT_CANDIDATES);
+  if (!selectStr.includes("id")) {
+    return {
+      row: null,
+      error: "warehouse_ledger_stock 缺少 id 欄位",
+      fatal: true,
+    };
+  }
+
+  const scopes = pickScopeColumns(colSet);
+  const oc = orderColumn(colSet);
+  const norm = candidate.replace(/\uFEFF/g, "").trim();
+
+  type Attempt = { scope?: ScopeCol };
+  const attempts: Attempt[] = [];
+  for (const s of scopes) attempts.push({ scope: s });
+  attempts.push({});
+
+  for (const itemCol of itemCols) {
+    for (const att of attempts) {
+      let q = admin.from("warehouse_ledger_stock").select(selectStr).eq(itemCol, norm);
+      if (att.scope) q = q.eq(att.scope, tenant_id);
+      if (oc) q = q.order(oc, { ascending: false });
+      q = q.limit(1);
+      const res = await q;
+      if (res.error) {
+        if (scopeMissingColumn(res.error.message)) continue;
+        return { row: null, error: res.error.message, fatal: true };
+      }
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const row = rows[0] as unknown as Record<string, unknown> | undefined;
+      if (row) return { row, error: null, fatal: false };
+    }
+  }
+
+  return { row: null, error: null, fatal: false };
+}
+
+async function queryInventoryByCandidate(
+  admin: SupabaseClient,
+  tenant_id: string,
+  candidate: string,
+  colSet: Set<string>,
+): Promise<{
+  row: Record<string, unknown> | null;
+  error: string | null;
+  fatal: boolean;
+}> {
+  if (!colSet.has("item_code")) {
+    return { row: null, error: null, fatal: false };
+  }
+
+  const selectStr = selectExistingColumns(colSet, INV_SELECT_CANDIDATES);
+  if (!selectStr) {
+    return { row: null, error: null, fatal: false };
+  }
+
+  const scopes = pickScopeColumns(colSet);
+  const norm = candidate.replace(/\uFEFF/g, "").trim();
+  const oc = orderColumn(colSet);
+
+  type Attempt = { scope?: ScopeCol };
+  const attempts: Attempt[] = [];
+  for (const s of scopes) attempts.push({ scope: s });
+  attempts.push({});
+
+  for (const att of attempts) {
+    let q = admin.from("inventory_items").select(selectStr).eq("item_code", norm);
+    if (att.scope) q = q.eq(att.scope, tenant_id);
+    if (oc) q = q.order(oc, { ascending: false });
+    q = q.limit(1);
+    const res = await q;
+    if (res.error) {
+      const msg = res.error.message;
+      if (/does not exist|schema cache|Could not find/i.test(msg)) {
+        return { row: null, error: null, fatal: false };
+      }
+      if (scopeMissingColumn(msg)) continue;
+      return { row: null, error: msg, fatal: true };
+    }
+    const rows = Array.isArray(res.data) ? res.data : [];
+    const row = rows[0] as unknown as Record<string, unknown> | undefined;
+    if (row) return { row, error: null, fatal: false };
+  }
+
+  return { row: null, error: null, fatal: false };
+}
+
+function mergeInventory(
+  ledgerRow: Record<string, unknown> | null,
+  invRow: Record<string, unknown> | null,
+  qtyCol: string | null,
+): { item_name: string; spec: string; on_hand: number } {
+  let fromLedger = 0;
+  if (ledgerRow) {
+    if (qtyCol && qtyCol in ledgerRow) {
+      fromLedger = Number(ledgerRow[qtyCol] ?? 0);
+    } else {
+      fromLedger = Number(
+        ledgerRow.stock_quantity ?? ledgerRow.on_hand ?? 0,
+      );
+    }
+  }
+
+  const invMeta =
+    invRow?.meta && typeof invRow.meta === "object" && !Array.isArray(invRow.meta)
+      ? (invRow.meta as Record<string, unknown>)
+      : {};
+
+  const nameLedger = String(ledgerRow?.item_name ?? "").trim();
+  const specLedger = String(ledgerRow?.spec ?? "").trim();
+  const nameInv = String(invRow?.item_name ?? invMeta.item_name ?? "").trim();
+  const specInv = String(invRow?.spec ?? invMeta.spec ?? "").trim();
+
+  return {
+    item_name: nameLedger || nameInv,
+    spec: specLedger || specInv,
+    on_hand: Number.isFinite(fromLedger) ? fromLedger : 0,
+  };
 }
 
 export async function GET(req: Request) {
@@ -162,6 +290,31 @@ export async function GET(req: Request) {
   if (!admin) {
     return missingServiceRoleResponse();
   }
+
+  const ping = await admin.from("warehouse_ledger_stock").select("id").limit(1);
+  if (ping.error && !scopeMissingColumn(ping.error.message)) {
+    return dbConnJson(503, ping.error.message);
+  }
+
+  const stockProbe = await fetchPublicTableColumns(admin, "warehouse_ledger_stock");
+  if (
+    stockProbe.columns == null &&
+    stockProbe.source === "unavailable"
+  ) {
+    return dbConnJson(
+      503,
+      stockProbe.detail ?? "無法讀取 warehouse_ledger_stock",
+    );
+  }
+
+  const stockCols = new Set(stockProbe.columns ?? []);
+  const qtyCol = pickNumericQtyColumn(stockCols);
+
+  const invProbe = await fetchPublicTableColumns(admin, "inventory_items");
+  const invCols =
+    invProbe.columns != null && invProbe.source !== "unavailable"
+      ? new Set(invProbe.columns)
+      : null;
 
   const url = new URL(req.url);
   const fromQuery = normalizeLabelPrefix(url.searchParams.get("tenant") ?? "");
@@ -176,20 +329,90 @@ export async function GET(req: Request) {
 
   const candidates = buildQrLookupCandidates(qr_in);
   if (candidates.length === 0) {
-    return NextResponse.json(
-      { error: "qr 內容無法解析" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "qr 內容無法解析" }, { status: 400 });
   }
 
   const tryPayloads = candidates.slice(0, 32);
 
+  /** 主路徑：inventory_items + warehouse_ledger_stock（依實際欄位），比對 item_code / item_no */
+  for (const cand of tryPayloads) {
+    let ledgerRow: Record<string, unknown> | null = null;
+    let invRow: Record<string, unknown> | null = null;
+
+    const invRes =
+      invCols && invCols.size > 0
+        ? await queryInventoryByCandidate(admin, tenant_id, cand, invCols)
+        : { row: null as Record<string, unknown> | null, error: null as string | null, fatal: false };
+
+    if (invRes.error && invRes.fatal) {
+      return dbConnJson(503, invRes.error);
+    }
+    invRow = invRes.row;
+
+    const ledgerRes = await queryLedgerByCandidate(admin, tenant_id, cand, stockCols);
+    if (ledgerRes.error && ledgerRes.fatal) {
+      return dbConnJson(503, ledgerRes.error);
+    }
+    ledgerRow = ledgerRes.row;
+
+    if (!ledgerRow && invRow && stockCols.size > 0) {
+      const altFromInv =
+        String(invRow.item_code ?? invRow.item_no ?? "").trim() || cand;
+      const second = await queryLedgerByCandidate(
+        admin,
+        tenant_id,
+        altFromInv,
+        stockCols,
+      );
+      if (second.error && second.fatal) {
+        return dbConnJson(503, second.error);
+      }
+      ledgerRow = second.row;
+    }
+
+    if (ledgerRow || invRow) {
+      const inventory = mergeInventory(ledgerRow, invRow, qtyCol);
+      const effectiveItemNo =
+        String(
+          ledgerRow?.item_no ??
+            ledgerRow?.item_code ??
+            invRow?.item_code ??
+            invRow?.item_no ??
+            cand,
+        ).trim() || cand;
+
+      const syntheticRecord: Record<string, unknown> = {
+        id: String(ledgerRow?.id ?? invRow?.id ?? ""),
+        tenant_id,
+        label_type: "inventory_direct",
+        qr_payload: qr_in,
+        item_no: effectiveItemNo,
+        color_code: null,
+        operator_id: null,
+        created_at: new Date().toISOString(),
+        meta: {
+          item_name: inventory.item_name,
+          spec: inventory.spec,
+          lookup_source: ledgerRow && invRow ? "ledger+inventory_items" : ledgerRow ? "warehouse_ledger_stock" : "inventory_items",
+        },
+      };
+
+      if (!syntheticRecord.id) {
+        return dbConnJson(503, "無法取得 ledger / inventory 的唯一 id");
+      }
+
+      return NextResponse.json({
+        found: true,
+        record: syntheticRecord,
+        inventory,
+      });
+    }
+  }
+
+  /** 退路：label_records（舊 QR / UUID） */
   const { row, error } = await pickLabelRow(admin, tenant_id, tryPayloads);
   if (error) {
-    return NextResponse.json(
-      { error: `查詢失敗：${error}` },
-      { status: 500 },
-    );
+    return dbConnJson(503, error);
   }
 
   if (!row) {
@@ -197,7 +420,7 @@ export async function GET(req: Request) {
       found: false,
       tenant_id,
       qr_payload: qr_in,
-      message: "查無此料號，請檢查資料庫設定",
+      message: "查無此料號（inventory_items／warehouse_ledger_stock／label_records 皆未命中）",
     });
   }
 
@@ -206,26 +429,37 @@ export async function GET(req: Request) {
     ? (row.meta as Record<string, unknown>)
     : {}) as Record<string, unknown>;
 
-  const ledger = await fetchLedgerStockRow(admin, tenant_id, itemNo);
+  const ledgerRes = itemNo
+    ? await queryLedgerByCandidate(admin, tenant_id, itemNo, stockCols)
+    : { row: null, error: null as string | null, fatal: false };
+  if (ledgerRes.error && ledgerRes.fatal) {
+    return dbConnJson(503, ledgerRes.error ?? undefined);
+  }
 
+  const ledgerRow = ledgerRes.row;
   const metaName = String(meta.item_name ?? meta.product_name ?? "").trim();
   const metaSpec = String(meta.spec ?? "").trim();
 
-  const inventory = ledger
-    ? {
-        item_name: ledger.item_name || metaName || "",
-        spec: ledger.spec || metaSpec || "",
-        on_hand: ledger.on_hand,
-      }
+  const inventory = ledgerRow
+    ? mergeInventory(ledgerRow, null, qtyCol)
     : {
         item_name: metaName,
         spec: metaSpec,
         on_hand: 0,
       };
 
+  if (!metaName && !ledgerRow) {
+    inventory.item_name = metaName;
+    inventory.spec = metaSpec;
+  }
+
   return NextResponse.json({
     found: true,
     record: row,
-    inventory,
+    inventory: {
+      item_name: inventory.item_name || metaName,
+      spec: inventory.spec || metaSpec,
+      on_hand: inventory.on_hand,
+    },
   });
 }

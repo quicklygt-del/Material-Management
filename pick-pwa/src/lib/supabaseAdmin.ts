@@ -39,7 +39,8 @@ export function missingServiceRoleResponse(): NextResponse {
         : "";
   return NextResponse.json(
     {
-      error: `無法連線資料庫。${hint} 設定後請重新部署。`,
+      error: "Database Connection Error",
+      message_zh: `無法連線資料庫。${hint} 設定後請重新部署。`,
     },
     { status: 503 },
   );
