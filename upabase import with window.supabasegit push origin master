@@ -47,26 +47,26 @@ warning: in the working copy of 'pick-pwa/src/app/admin/page.tsx', LF will be re
 [32m+[m
 [32m+[m[32m      // 嘗試從 localStorage 取得租戶資訊[m
 [32m+[m[32m      const sessionData = localStorage.getItem("rmc_session_user");[m
-[32m+[m[32m      let currentTenantId = "";[m
+[32m+[m[32m      let currentId = "";[m
 [32m+[m
 [32m+[m[32m      if (sessionData) {[m
 [32m+[m[32m        const parsed = JSON.parse(sessionData);[m
-[32m+[m[32m        currentTenantId = parsed.;[m
-[32m+[m[32m        console.log("✅ 成功從 Session 取得租戶 ID:", currentTenantId);[m
+[32m+[m[32m        currentId = parsed.;[m
+[32m+[m[32m        console.log("✅ 成功從 Session 取得租戶 ID:", currentId);[m
 [32m+[m[32m      } else {[m
 [32m+[m[32m        console.warn("⚠️ 找不到本地 Session，嘗試從 Auth 重新獲取...");[m
 [32m+[m[32m        const { data: { session } } = await supabase.auth.getSession();[m
-[32m+[m[32m        currentTenantId = session?.user?.user_metadata?.;[m
+[32m+[m[32m        currentId = session?.user?.user_metadata?.;[m
 [32m+[m[32m      }[m
 [32m+[m
-[32m+[m[32m      if (!currentTenantId) {[m
+[32m+[m[32m      if (!currentId) {[m
 [32m+[m[32m        console.error("❌ 嚴重錯誤：無法識別當前租戶身分，請重新登入。");[m
 [32m+[m[32m        setConnectionStatus("offline");[m
 [32m+[m[32m        return;[m
 [32m+[m[32m      }[m
 [32m+[m
 [32m+[m[32m      // 執行資料抓取[cite: 1][m
-[32m+[m[32m      await fetchUsers(currentTenantId);[m
+[32m+[m[32m      await fetchUsers(currentId);[m
 [32m+[m[32m      setConnectionStatus("online");[m
 [32m+[m
      } catch (err) {[m
@@ -79,14 +79,14 @@ warning: in the working copy of 'pick-pwa/src/app/admin/page.tsx', LF will be re
 [32m+[m[32m  /**[m
 [32m+[m[32m   * 2. 抓取該租戶所屬的人員名單[cite: 1][m
 [32m+[m[32m   */[m
-[32m+[m[32m  const fetchUsers = async (tenantId: string) => {[m
+[32m+[m[32m  const fetchUsers = async (Id: string) => {[m
 [32m+[m[32m    try {[m
-[32m+[m[32m      console.log(`📡 正在請求租戶人員清單 (Tenant: ${tenantId})...`);[m
+[32m+[m[32m      console.log(`📡 正在請求租戶人員清單 (: ${Id})...`);[m
 [32m+[m[41m      [m
 [32m+[m[32m      const { data, error } = await supabase[m
 [32m+[m[32m        .from("warehouse_operators")[m
 [32m+[m[32m        .select("name, id, ")[m
-[32m+[m[32m        .eq("", tenantId) // 多租戶隔離核心[cite: 1][m
+[32m+[m[32m        .eq("", Id) // 多租戶隔離核心[cite: 1][m
 [32m+[m[32m        .eq("active", true)[m
 [32m+[m[32m        .order("name", { ascending: true });[m
 [32m+[m[41m        [m

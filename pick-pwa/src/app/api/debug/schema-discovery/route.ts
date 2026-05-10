@@ -32,8 +32,8 @@ export async function GET(req: Request) {
   const admin = getSupabaseServiceRoleClient();
 
   const urlObj = new URL(req.url);
-  const tenantHint =
-    normalizeLabelPrefix(urlObj.searchParams.get("tenant") ?? "") ||
+  const labelPrefixHint =
+    normalizeLabelPrefix(urlObj.searchParams.get("label_prefix") ?? "") ||
     getDefaultLabelPrefix();
 
   const envReport = {
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     service_role_configured: Boolean(roleKey.trim()),
     service_role_looks_valid_jwt: isPlausibleServiceRoleKey(),
     service_role_preview: maskSecret(roleKey),
-    tenant_hint: tenantHint || null,
+    label_prefix_hint: labelPrefixHint || null,
   };
 
   if (!admin) {

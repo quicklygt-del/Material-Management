@@ -34,7 +34,6 @@ export function opTypeShortLabel(op: WarehouseOpType): string {
 export async function fetchTodayTasksGrouped(
   supabase: SupabaseClient,
   assignedOperator: string,
-  _tenantSlug: string,
 ): Promise<WarehouseTaskGroup[]> {
   const name = assignedOperator.trim();
   if (!name) return [];
@@ -47,11 +46,11 @@ export async function fetchTodayTasksGrouped(
   // 與指揮塔看板一致：依「指派對象＋未完成」列出，不要用 created_at 卡「今天」，
   // 否則跨日／時區／舊單會出現管理端有單、倉管端空白。
   const selFull =
-    "id,order_no,item_no:item_code,required_qty:target_qty,picked_qty,operation_type,status";
+    "id,order_no,item_no:item_no,required_qty:target_qty,picked_qty,operation_type,status";
   const selNoPicked =
-    "id,order_no,item_no:item_code,required_qty:target_qty,operation_type,status";
+    "id,order_no,item_no:item_no,required_qty:target_qty,operation_type,status";
 
-  let tq = supabase
+  const tq = supabase
     .from("picking_tasks")
     .select(selFull)
     .eq("assigned_operator", name)
@@ -98,7 +97,7 @@ export async function fetchTodayTasksGrouped(
   const taskIds = taskList.map((t) => String(t.id)).filter(Boolean);
   const pickedByTask = new Map<string, number>();
   if (taskIds.length > 0) {
-    let lq = supabase
+    const lq = supabase
       .from("picking_logs")
       .select("task_id,actual_qty")
       .in("task_id", taskIds);

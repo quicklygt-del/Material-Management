@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import {
-  storageZonesSelectIdScope,
-  zoneRowScopeValue,
-} from "@/lib/storageZonesScope";
+import { storageZonesSelectIdScope } from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +20,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "JSON 格式錯誤" }, { status: 400 });
   }
   const b = body as Record<string, unknown>;
-  const  =
-    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const unit_id = String(b.unit_id ?? "").trim();
   if (!unit_id) {
     return NextResponse.json({ error: "缺少 unit_id" }, { status: 400 });
@@ -42,18 +33,10 @@ export async function POST(req: Request) {
   if (zErr || !zone) {
     return NextResponse.json({ error: "找不到管理單位" }, { status: 404 });
   }
-  if (
-    normalizeLabelPrefix(
-      zoneRowScopeValue(zone as { ?: unknown; company_id?: unknown }),
-    ) !== 
-  ) {
-    return NextResponse.json({ error: "租戶不符" }, { status: 403 });
-  }
 
   const { error: delErr, count } = await admin
     .from("universal_ledger_records")
     .delete({ count: "exact" })
-    .eq("", )
     .eq("unit_id", unit_id);
 
   if (delErr) {

@@ -3,10 +3,10 @@
 -- 2) 撤銷 anon／authenticated 對 label_records 的直接存取；改由後端 API（service_role）寫入
 
 alter table public.app_users
-  add column if not exists company_id text not null default 'CARB';
+  add column if not exists company_id text not null default '';
 
 alter table public.warehouse_operators
-  add column if not exists company_id text not null default 'CARB';
+  add column if not exists company_id text not null default '';
 
 comment on column public.app_users.company_id is '企業識別碼，與標籤 QR 第一段、label_records. 一致';
 comment on column public.warehouse_operators.company_id is '企業識別碼，與標籤 QR 第一段、label_records. 一致';

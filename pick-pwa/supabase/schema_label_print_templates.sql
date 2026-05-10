@@ -13,7 +13,7 @@ create table if not exists public.label_print_templates (
 
 comment on table public.label_print_templates is '作業單位標籤 Excel／QR 欄位範本';
 
-create index if not exists idx_label_print_templates_tenant
+create index if not exists idx_label_print_templates_
   on public.label_print_templates ();
 
 alter table public.storage_zones

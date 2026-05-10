@@ -39,10 +39,10 @@ update public.storage_zones z
 set slug = concat('zone-', substr(replace(gen_random_uuid()::text, '-', ''), 1, 12))
 where z.slug is null or trim(z.slug) = '';
 
-create unique index if not exists idx_storage_zones_tenant_slug
+create unique index if not exists idx_storage_zones__slug
   on public.storage_zones (, slug)
   where slug is not null and length(trim(slug)) > 0;
 
-create unique index if not exists idx_storage_zones_tenant_portal_login
+create unique index if not exists idx_storage_zones__portal_login
   on public.storage_zones (, portal_login)
   where length(trim(portal_login)) > 0;

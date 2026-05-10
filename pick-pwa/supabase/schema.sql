@@ -72,7 +72,7 @@ create table if not exists public.app_users (
   created_at timestamptz not null default now()
 );
 alter table public.app_users add column if not exists created_at timestamptz not null default now();
-alter table public.app_users add column if not exists company_id text not null default 'CARB';
+alter table public.app_users add column if not exists company_id text not null default '';
 
 -- 開發期簡化：若你使用 anon key 直連資料庫，需開放對應權限
 alter table public.app_users enable row level security;

@@ -15,13 +15,13 @@ import { fireWarehouseLedgerPostMove } from "@/lib/warehouseLedger";
 import { playErrorBeep, playSuccessBeep } from "@/lib/playBeep";
 import { orderGroupKey } from "@/lib/pickingAgg";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 type PickingTaskRow = {
   id: string;
   order_no: string;
   item_no: string;
-  item_code?: string;
+  item_no?: string;
   item_name?: string;
   spec?: string;
   unit?: string;
@@ -83,14 +83,14 @@ function normItemNo(s: string) {
   return s.replace(/\uFEFF/g, "").trim();
 }
 
-/** QR／手輸內容解析為料號：純字串或常見 URL 查詢參數（item_no / item_code / item / sku / code） */
+/** QR／手輸內容解析為料號：純字串或常見 URL 查詢參數（item_no / item_no / item / sku / code） */
 function parseScanAsItemNo(raw: string): string | null {
   const trimmed = String(raw ?? "").replace(/\uFEFF/g, "").trim();
   if (!trimmed) return null;
 
   const fromQueryKey = (s: string): string | null => {
     const m =
-      /(?:^|[?&#])(?:item_no|item_code|item|sku|code)=([^&#]+)/i.exec(s);
+      /(?:^|[?&#])(?:item_no|item_no|item|sku|code)=([^&#]+)/i.exec(s);
     if (!m?.[1]) return null;
     try {
       const v = decodeURIComponent(m[1].replace(/\+/g, " "));
@@ -109,7 +109,7 @@ function parseScanAsItemNo(raw: string): string | null {
       const u = new URL(trimmed);
       const qp =
         u.searchParams.get("item_no") ||
-        u.searchParams.get("item_code") ||
+        u.searchParams.get("item_no") ||
         u.searchParams.get("item") ||
         u.searchParams.get("sku") ||
         u.searchParams.get("code");
@@ -635,7 +635,7 @@ function OperatePageContent() {
       taskIdFromQuery &&
       isTaskUuid(taskIdFromQuery)
     ) {
-      let probeQ = supabase
+      const probeQ = supabase
         .from("picking_tasks")
         .select("order_no")
         .eq("id", taskIdFromQuery)
@@ -665,9 +665,9 @@ function OperatePageContent() {
     }
 
     const baseSel =
-      "id,order_no,item_no:item_code,item_code,item_name,spec,unit,required_qty:target_qty,picked_qty,is_blind_count,status,assigned_operator,started_at,operation_type";
+      "id,order_no,item_no:item_no,item_no,item_name,spec,unit,required_qty:target_qty,picked_qty,is_blind_count,status,assigned_operator,started_at,operation_type";
     const fallbackSel =
-      "id,order_no,item_no:item_code,item_code,item_name,unit,required_qty:target_qty,picked_qty,status,assigned_operator,started_at,operation_type";
+      "id,order_no,item_no:item_no,item_no,item_name,unit,required_qty:target_qty,picked_qty,status,assigned_operator,started_at,operation_type";
 
     const qb = (sel: string, restrictOrderNo: string | null) => {
       let q = supabase
@@ -686,7 +686,7 @@ function OperatePageContent() {
     let { data, error } = await qb(baseSel, filterOrderNo);
     if (
       error?.message.includes("is_blind_count") ||
-      error?.message.includes("item_code") ||
+      error?.message.includes("item_no") ||
       error?.message.includes("unit") ||
       error?.message.includes("spec")
     ) {
@@ -702,7 +702,7 @@ function OperatePageContent() {
         item_name?: string | null;
         unit?: string | null;
         spec?: string | null;
-        item_code?: string | null;
+        item_no?: string | null;
         picked_qty?: number | null;
         is_blind_count?: boolean | null;
       }
@@ -718,7 +718,7 @@ function OperatePageContent() {
       ({ data, error } = await qb(baseSel, null));
       if (
         error?.message.includes("is_blind_count") ||
-        error?.message.includes("item_code") ||
+        error?.message.includes("item_no") ||
         error?.message.includes("unit") ||
         error?.message.includes("spec")
       ) {
@@ -737,7 +737,7 @@ function OperatePageContent() {
     const taskIds = rows.map((t) => String(t.id)).filter(Boolean);
     const pickedByTask = new Map<string, number>();
     if (taskIds.length > 0) {
-      let lq = supabase
+      const lq = supabase
         .from("picking_logs")
         .select("task_id,actual_qty")
         .in("task_id", taskIds);
@@ -760,7 +760,7 @@ function OperatePageContent() {
         item_name: normItemNo(String(t.item_name ?? "")).trim() || undefined,
         unit: normItemNo(String(t.unit ?? "")).trim() || undefined,
         spec: normItemNo(String(t.spec ?? "")).trim() || undefined,
-        item_code: normItemNo(String(t.item_code ?? "")).trim() || undefined,
+        item_no: normItemNo(String(t.item_no ?? "")).trim() || undefined,
         is_blind_count:
           typeof t.is_blind_count === "boolean" ? t.is_blind_count : undefined,
         picked_qty: Math.max(
@@ -1200,7 +1200,7 @@ function OperatePageContent() {
       const candidates = selectedOrderTasks.filter(
         (t) =>
           itemNoMatchesTask(t.item_no, token) ||
-          itemNoMatchesTask(t.item_code ?? "", token),
+          itemNoMatchesTask(t.item_no ?? "", token),
       );
       const pending = candidates.filter((t) => t.picked_qty < t.required_qty);
       const h = pending[0] ?? candidates[0];
@@ -1547,7 +1547,7 @@ function OperatePageContent() {
           </p>
         </div>
         <Link
-          href={withTenantParam("/")}
+          href={appHref("/")}
           prefetch
           className="flex min-h-[48px] shrink-0 flex-col items-end justify-center rounded-xl border-4 border-blue-800 bg-blue-50 px-3 py-1.5 text-right text-sm font-black text-blue-950 shadow-sm active:scale-[0.99]"
         >
@@ -1595,7 +1595,7 @@ function OperatePageContent() {
             完成本作業後請按右上角「回首頁」換下一張單。
           </p>
           <Link
-            href={withTenantParam("/")}
+            href={appHref("/")}
             prefetch
             className="mt-5 inline-flex min-h-[56px] w-full items-center justify-center rounded-xl bg-blue-800 text-xl font-black text-white shadow-lg active:scale-[0.99]"
           >

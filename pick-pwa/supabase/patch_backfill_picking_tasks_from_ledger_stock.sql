@@ -11,7 +11,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'picking_tasks' AND column_name = 'item_code'
+    WHERE table_schema = 'public' AND table_name = 'picking_tasks' AND column_name = 'item_no'
   ) THEN
     EXECUTE $SQL$
       UPDATE public.picking_tasks pt
@@ -20,7 +20,7 @@ BEGIN
         spec = COALESCE(NULLIF(BTRIM(pt.spec), ''), NULLIF(BTRIM(wls.spec), ''))
       FROM public.warehouse_ledger_stock wls
       WHERE pt. = wls.
-        AND lower(btrim(pt.item_code)) = lower(btrim(wls.item_no))
+        AND lower(btrim(pt.item_no)) = lower(btrim(wls.item_no))
         AND (pt.item_name IS NULL OR btrim(pt.item_name) = '');
     $SQL$;
   ELSIF EXISTS (

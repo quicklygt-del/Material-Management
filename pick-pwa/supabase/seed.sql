@@ -4,8 +4,8 @@
 -- 1) 測試帳號（簡易帳密）：系統管理 admin、倉儲主管 warehouse_admin
 insert into public.app_users (username, password, role, company_id)
 values
-  ('admin', 'admin1234', 'system_admin', 'CARB'),
-  ('warehouse_admin', 'wa12345', 'warehouse_admin', 'CARB')
+  ('admin', 'admin1234', 'system_admin', ''),
+  ('warehouse_admin', 'wa12345', 'warehouse_admin', '')
 on conflict (username) do update
 set
   password = excluded.password,
@@ -15,8 +15,8 @@ set
 -- 1b) 倉管員（warehouse_operators）：李大同、王添
 insert into public.warehouse_operators (name, password, active, company_id)
 values
-  ('李大同', 'wh1234', true, 'CARB'),
-  ('王添', 'wh1234', true, 'CARB')
+  ('李大同', 'wh1234', true, ''),
+  ('王添', 'wh1234', true, '')
 on conflict (name) do update
 set
   password = excluded.password,

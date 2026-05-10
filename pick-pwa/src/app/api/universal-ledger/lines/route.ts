@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import {
-  storageZonesSelectIdScope,
-  zoneRowScopeValue,
-} from "@/lib/storageZonesScope";
+import { storageZonesSelectIdScope } from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +15,10 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const  =
-    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
-    getDefaultLabelPrefix();
   const unit_id = url.searchParams.get("unit_id")?.trim();
 
-  if (! || !unit_id) {
-    return NextResponse.json(
-      { error: "缺少 tenant 或 unit_id" },
-      { status: 400 },
-    );
+  if (!unit_id) {
+    return NextResponse.json({ error: "缺少 unit_id" }, { status: 400 });
   }
 
   const { data: zone, error: zErr } = await admin
@@ -42,20 +29,12 @@ export async function GET(req: Request) {
   if (zErr || !zone) {
     return NextResponse.json({ error: "管理單位不存在" }, { status: 400 });
   }
-  if (
-    normalizeLabelPrefix(
-      zoneRowScopeValue(zone as { ?: unknown; company_id?: unknown }),
-    ) !== 
-  ) {
-    return NextResponse.json({ error: "單位與公司識別不符" }, { status: 403 });
-  }
 
   const { data, error } = await admin
     .from("universal_ledger_records")
     .select(
       "id,created_at,summary,quantity_delta,balance_after,action_type,operator_name,qr_payload,label_record_id",
     )
-    .eq("", )
     .eq("unit_id", unit_id)
     .order("created_at", { ascending: true });
 

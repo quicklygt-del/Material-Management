@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { QrCenterTenantProvider } from "@/lib/qrCenterTenant";
+import { QrCenterLabelProvider } from "@/lib/qrCenterLabel";
 
 export default function FieldLayout({
   children,
@@ -14,7 +14,7 @@ export default function FieldLayout({
         </div>
       }
     >
-      <QrCenterTenantProvider>{children}</QrCenterTenantProvider>
+      <QrCenterLabelProvider>{children}</QrCenterLabelProvider>
     </Suspense>
   );
 }

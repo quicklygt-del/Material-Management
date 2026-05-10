@@ -11,8 +11,7 @@ import {
   type LabelTypeCode,
   resolveSerialSource,
 } from "@/lib/labelEncoding";
-import { useQrCenterTenant } from "@/lib/qrCenterTenant";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 import {
   bluetoothSendText,
   formatLabelPrintLines,
@@ -68,8 +67,6 @@ function workflowToLabelType(mode: QrWorkflowMode): LabelTypeCode {
 export function QrCenterGenerator() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { tenantId } = useQrCenterTenant();
-
   const [mode, setMode] = useState<QrWorkflowMode>("general");
   useEffect(() => {
     const m = searchParams.get("mode");
@@ -334,7 +331,6 @@ export function QrCenterGenerator() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        : tenantId,
         label_type: labelType,
         qr_payload: qrPayload,
         item_no: recordItemNo,
@@ -346,7 +342,6 @@ export function QrCenterGenerator() {
     const json = (await res.json().catch(() => ({}))) as { error?: string };
     if (!res.ok) throw new Error(json.error || `伺服器錯誤 ${res.status}`);
   }, [
-    tenantId,
     mode,
     operationUnit,
     description,
@@ -462,7 +457,7 @@ export function QrCenterGenerator() {
     <main className="mx-auto w-full max-w-lg px-4 pb-24 pt-3 sm:px-5">
       <div className="mb-4 flex justify-end rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
         <Link
-          href={withTenantParam("/qr-center/scan")}
+          href={appHref("/qr-center/scan")}
           className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-lg border-2 border-blue-700 bg-blue-50 px-4 text-sm font-black text-blue-900"
         >
           掃描辨識

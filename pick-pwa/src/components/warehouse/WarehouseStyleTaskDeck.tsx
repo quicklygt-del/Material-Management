@@ -8,9 +8,8 @@ import {
   opTypeShortLabel,
   type WarehouseTaskGroup,
 } from "@/lib/warehouseTasks";
-import { getEffectiveTenantSlug } from "@/lib/tenantContext";
+import { appHref } from "@/lib/appHref";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { withTenantParam } from "@/lib/tenantNav";
 
 export function WarehouseStyleTaskDeck({
   assignedOperator,
@@ -23,14 +22,14 @@ export function WarehouseStyleTaskDeck({
   titleSuffix?: string;
   compactForUnit?: boolean;
 }) {
+  void compactForUnit;
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const op = assignedOperator.trim();
-  const tenant = getEffectiveTenantSlug();
 
   const fetchMyTasks = useCallback(async (): Promise<WarehouseTaskGroup[]> => {
-    return fetchTodayTasksGrouped(supabase, op, tenant);
-  }, [op, supabase, tenant]);
+    return fetchTodayTasksGrouped(supabase, op);
+  }, [op, supabase]);
 
   const {
     data: myTasks = [],
@@ -38,7 +37,7 @@ export function WarehouseStyleTaskDeck({
     isLoading: myTasksLoading,
     isValidating: myTasksRefreshing,
     mutate: reloadMyTasks,
-  } = useSWR(op ? `my-tasks:${op}:${tenant}` : null, fetchMyTasks, {
+  } = useSWR(op ? `my-tasks:${op}` : null, fetchMyTasks, {
     revalidateOnFocus: true,
     keepPreviousData: true,
     dedupingInterval: 10_000,
@@ -83,7 +82,7 @@ export function WarehouseStyleTaskDeck({
                   orderKey: t.groupKey,
                   orderNo: t.order_no,
                 });
-                router.push(withTenantParam(`/operate?${q.toString()}`));
+                router.push(appHref(`/operate?${q.toString()}`));
               }}
               className="w-full rounded-xl border border-slate-300 bg-blue-50 p-3 text-left font-black"
             >

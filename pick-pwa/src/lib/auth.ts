@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { normalizeLabelPrefix } from "@/lib/labelEncoding";
-import { withTenantParam } from "@/lib/tenantNav";
-
 /** 正式身分（DB／Session 以新值為準；舊值讀取時會正規化） */
 export type UserRole = "warehouse_admin" | "system_admin" | "warehouse_staff";
 
@@ -10,8 +7,6 @@ export type SessionUser = {
   id: string;
   username: string;
   role: UserRole;
-  /** 與標籤前綴／company_id 一致；Tenant Admin／Operator 登入後寫入 */
-  tenant_slug?: string;
 };
 
 const STORAGE_KEY = "pick-pwa-session";
@@ -47,7 +42,7 @@ export function postLoginRedirectPath(role: UserRole): string {
 /** 回到首頁登入：清除 pick-pwa 本機身分，避免已登入者被自動導回後台造成循環。 */
 export function exitToLoginHome(router: { replace: (href: string) => void }) {
   clearSessionUser();
-  router.replace(withTenantParam("/"));
+  router.replace("/");
 }
 
 function isValidStoredRole(x: unknown): x is UserRole {
@@ -70,23 +65,13 @@ function isValidSessionShape(x: unknown): x is SessionUser {
   ) {
     return false;
   }
-  if (o.tenant_slug != null && typeof o.tenant_slug !== "string") {
-    return false;
-  }
   return true;
 }
 
 function normalizeSessionUser(raw: SessionUser): SessionUser {
   const nr = normalizeRole(raw.role);
   if (!nr) return raw;
-  const slugRaw =
-    typeof raw.tenant_slug === "string" ? raw.tenant_slug.trim() : "";
-  const tenant_slug =
-    slugRaw !== "" ? normalizeLabelPrefix(slugRaw) : undefined;
-  const next = { ...raw, role: nr };
-  if (tenant_slug !== undefined) next.tenant_slug = tenant_slug;
-  else delete (next as { tenant_slug?: string }).tenant_slug;
-  return next;
+  return { id: raw.id, username: raw.username, role: nr };
 }
 
 /** 派單控制台、資產分頁、標籤中心：僅倉儲主管 */
@@ -162,7 +147,6 @@ export async function loginUnifiedByPassword(
   supabase: SupabaseClient,
   username: string,
   password: string,
-  tenantId: string,
   opts?: { skipUnitPortal?: boolean },
 ): Promise<UnifiedLoginResult> {
   const name = username.trim();
@@ -187,21 +171,16 @@ export async function loginUnifiedByPassword(
         id?: string;
         username?: string;
         role?: string;
-        tenant_slug?: string;
       };
       if (res.ok && j.id && j.username && j.role) {
         const nr = normalizeRole(j.role);
         if (!nr) {
           return { ok: false, message: "無法辨識帳號身分" };
         }
-        const tenantRaw = String(j.tenant_slug ?? "").trim();
         const user: SessionUser = {
           id: String(j.id),
           username: String(j.username),
           role: nr,
-          ...(tenantRaw !== ""
-            ? { tenant_slug: normalizeLabelPrefix(tenantRaw) }
-            : {}),
         };
         saveSessionUser(user);
         return { ok: true, user };
@@ -220,7 +199,7 @@ export async function loginUnifiedByPassword(
 
   const { data: appRow, error: appErr } = await supabase
     .from("app_users")
-    .select("id,username,role,company_id")
+    .select("id,username,role")
     .eq("username", name)
     .eq("password", pwd)
     .maybeSingle();
@@ -232,14 +211,10 @@ export async function loginUnifiedByPassword(
     if (!nr) {
       return { ok: false, message: "帳號或密碼錯誤" };
     }
-    const cid = String(
-      (appRow as { company_id?: string }).company_id ?? "",
-    ).trim();
     const user: SessionUser = {
       id: String(appRow.id),
       username: String(appRow.username),
       role: nr,
-      ...(cid !== "" ? { tenant_slug: normalizeLabelPrefix(cid) } : {}),
     };
     saveSessionUser(user);
     return { ok: true, user };
@@ -247,7 +222,7 @@ export async function loginUnifiedByPassword(
 
   const { data: op, error: opErr } = await supabase
     .from("warehouse_operators")
-    .select("id,name,active,password,company_id")
+    .select("id,name,active,password")
     .eq("name", name)
     .eq("active", true)
     .eq("password", pwd)
@@ -257,14 +232,10 @@ export async function loginUnifiedByPassword(
     return { ok: false, message: `登入查詢失敗：${opErr.message}` };
   }
   if (op) {
-    const cid = String(
-      (op as { company_id?: string }).company_id ?? "",
-    ).trim();
     const user: SessionUser = {
       id: String(op.id),
       username: String(op.name),
       role: "warehouse_staff",
-      ...(cid !== "" ? { tenant_slug: normalizeLabelPrefix(cid) } : {}),
     };
     saveSessionUser(user);
     return { ok: true, user };
@@ -285,7 +256,6 @@ export async function loginUnifiedByPassword(
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          : tenantId,
           portal_login: name,
           password: pwd,
         }),
@@ -312,7 +282,7 @@ export async function loginWarehouseByPassword(
   username: string,
   password: string,
 ): Promise<{ ok: true; user: SessionUser } | { ok: false; message: string }> {
-  const r = await loginUnifiedByPassword(supabase, username, password, "", {
+  const r = await loginUnifiedByPassword(supabase, username, password, {
     skipUnitPortal: true,
   });
   if (r.ok && "user" in r) {
@@ -330,7 +300,7 @@ export async function loginWarehouseAdminByPassword(
   username: string,
   password: string,
 ): Promise<{ ok: true; user: SessionUser } | { ok: false; message: string }> {
-  const r = await loginUnifiedByPassword(supabase, username, password, "", {
+  const r = await loginUnifiedByPassword(supabase, username, password, {
     skipUnitPortal: true,
   });
   if (r.ok && "user" in r) {
@@ -352,7 +322,7 @@ export async function loginByPassword(
   if (name.toLowerCase() !== "admin") {
     return { ok: false, message: "請使用 admin 帳號" };
   }
-  const r = await loginUnifiedByPassword(supabase, "admin", password, "");
+  const r = await loginUnifiedByPassword(supabase, "admin", password);
   if (r.ok && "user" in r) {
     if (r.user.role !== "system_admin") {
       return { ok: false, message: "帳號或密碼錯誤" };

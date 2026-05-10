@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
@@ -18,15 +14,12 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const  =
-    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
-    getDefaultLabelPrefix();
   const unit_id = url.searchParams.get("unit_id")?.trim();
   const label_record_id = url.searchParams.get("label_record_id")?.trim();
 
-  if (! || !unit_id || !label_record_id) {
+  if (!unit_id || !label_record_id) {
     return NextResponse.json(
-      { error: "缺少 tenant、unit_id 或 label_record_id" },
+      { error: "缺少 unit_id 或 label_record_id" },
       { status: 400 },
     );
   }
@@ -34,7 +27,6 @@ export async function GET(req: Request) {
   const { data: last, error: e1 } = await admin
     .from("universal_ledger_records")
     .select("balance_after")
-    .eq("", )
     .eq("unit_id", unit_id)
     .eq("label_record_id", label_record_id)
     .order("created_at", { ascending: false })
@@ -48,7 +40,6 @@ export async function GET(req: Request) {
   const { data, error } = await admin
     .from("universal_ledger_records")
     .select("quantity_delta")
-    .eq("", )
     .eq("unit_id", unit_id)
     .eq("label_record_id", label_record_id);
 

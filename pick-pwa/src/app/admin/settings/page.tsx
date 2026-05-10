@@ -7,8 +7,7 @@ import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
 import { canAccessAdminSettingsPage, getSessionUser } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { getEffectiveTenantSlug } from "@/lib/tenantContext";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 import { APP_VERSION } from "@/lib/version";
 
 type OperatorRow = {
@@ -33,9 +32,7 @@ export default function AdminSettingsPage() {
   const [qrTarget, setQrTarget] = useState<OperatorRow | null>(null);
 
   const buildOperatorEntryUrl = useCallback((operatorName: string) => {
-    const tenant = getEffectiveTenantSlug();
     const u = new URL("/", window.location.origin);
-    u.searchParams.set("tenant", tenant);
     u.searchParams.set("prefill", operatorName.trim());
     return u.toString();
   }, []);
@@ -43,7 +40,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     const user = getSessionUser();
     if (user?.role === "system_admin") {
-      router.replace(withTenantParam("/admin/other-operations"));
+      router.replace(appHref("/admin/other-operations"));
       return;
     }
     if (!user || !canAccessAdminSettingsPage(user.role)) {
@@ -55,11 +52,9 @@ export default function AdminSettingsPage() {
   }, [router]);
 
   const loadOperators = useCallback(async () => {
-    const tenant = getEffectiveTenantSlug();
     const { data, error } = await supabase
       .from("warehouse_operators")
       .select("id,name,password,active")
-      .eq("company_id", tenant)
       .order("name", { ascending: true });
     if (error) {
       setMsg(error.message);
@@ -102,7 +97,6 @@ export default function AdminSettingsPage() {
     }
     setBusy(true);
     setMsg(null);
-    const tenant = getEffectiveTenantSlug();
     try {
       let error: { message: string } | null = null;
       if (editingOp) {
@@ -111,7 +105,6 @@ export default function AdminSettingsPage() {
           .update({
             name,
             password: opFormPassword,
-            company_id: tenant,
           })
           .eq("id", editingOp.id));
       } else {
@@ -121,7 +114,6 @@ export default function AdminSettingsPage() {
             name,
             password: opFormPassword,
             active: true,
-            company_id: tenant,
           }));
       }
       if (error) throw new Error(error.message);
@@ -168,7 +160,7 @@ export default function AdminSettingsPage() {
         <div className="flex flex-col items-end gap-2 text-right">
           <button
             type="button"
-            onClick={() => router.push(withTenantParam("/admin"))}
+            onClick={() => router.push(appHref("/admin"))}
             className="text-sm font-bold text-slate-600 underline"
           >
             回到倉儲主管

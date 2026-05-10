@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 function InviteConsumeInner() {
   const router = useRouter();
@@ -48,7 +48,7 @@ function InviteConsumeInner() {
         {msg ? msg : "正在授權進入…"}
       </p>
       <Link
-        href={withTenantParam("/")}
+        href={appHref("/")}
         className="mt-10 text-sm font-bold text-emerald-300 underline"
       >
         回首頁

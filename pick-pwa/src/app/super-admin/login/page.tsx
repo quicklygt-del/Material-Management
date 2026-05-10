@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 export default function SuperAdminLoginPage() {
   const router = useRouter();
@@ -17,7 +17,7 @@ export default function SuperAdminLoginPage() {
       try {
         const r = await fetch("/api/super-admin/session");
         const j = (await r.json()) as { authenticated?: boolean };
-        if (j.authenticated) router.replace(withTenantParam("/super-admin"));
+        if (j.authenticated) router.replace(appHref("/super-admin"));
       } catch {
         void 0;
       }
@@ -41,7 +41,7 @@ export default function SuperAdminLoginPage() {
         setMsg(j.error || "登入失敗");
         return;
       }
-      router.replace(withTenantParam("/super-admin"));
+      router.replace(appHref("/super-admin"));
     } catch {
       setMsg("連線失敗");
     } finally {
@@ -55,7 +55,7 @@ export default function SuperAdminLoginPage() {
         Super Admin 登入
       </h1>
       <p className="mt-2 text-xs font-bold leading-relaxed text-slate-400">
-        獨立於租戶後台；僅服務端環境變數帳密＋ HttpOnly Cookie JWT。
+        獨立於一般後台；僅服務端環境變數帳密＋ HttpOnly Cookie JWT。
       </p>
 
       <div className="mt-8 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
@@ -94,7 +94,7 @@ export default function SuperAdminLoginPage() {
       </div>
 
       <Link
-        href={withTenantParam("/")}
+        href={appHref("/")}
         className="mt-8 text-center text-xs font-bold text-slate-500 underline"
       >
         回到門戶首頁

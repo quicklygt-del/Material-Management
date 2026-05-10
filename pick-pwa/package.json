@@ -1,6 +1,6 @@
 {
   "name": "pick-pwa",
-  "version": "0.22.0",
+  "version": "0.22.5",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",

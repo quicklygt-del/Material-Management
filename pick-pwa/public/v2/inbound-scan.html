@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>入庫掃描</title>
+    <style>
+      :root {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #0f172a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: #f1f5f9;
+      }
+      .wrap {
+        margin: 0 auto;
+        max-width: 42rem;
+        padding: 12px 12px 112px;
+      }
+      .hdr {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.5);
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+      }
+      .hdr h1 {
+        margin: 0;
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+      .hdr .sub {
+        margin: 2px 0 0;
+        font-size: 1.125rem;
+        font-weight: 900;
+        color: #0f172a;
+      }
+      .lbl {
+        display: block;
+        font-size: 0.7rem;
+        font-weight: 900;
+        color: #475569;
+        margin-top: 10px;
+      }
+      .inp,
+      select.inp {
+        width: 100%;
+        margin-top: 4px;
+        min-height: 48px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 2px solid #94a3b8;
+        font-size: 1rem;
+        font-weight: 700;
+        background: #fff;
+      }
+      select.inp {
+        font-weight: 800;
+      }
+      .card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 12px 16px;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08);
+        margin-top: 12px;
+      }
+      .card h2 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+        font-weight: 900;
+        color: #1e293b;
+      }
+      .order-banner {
+        border-radius: 12px;
+        border: 2px solid #047857;
+        background: #ecfdf5;
+        padding: 8px 12px;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+        margin-top: 12px;
+      }
+      .order-banner p:first-child {
+        margin: 0;
+        text-align: center;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        color: #065f46;
+      }
+      .order-banner p:last-child {
+        margin: 4px 0 0;
+        text-align: center;
+        font-size: 1.25rem;
+        font-weight: 900;
+        color: #022c22;
+        word-break: break-all;
+      }
+      .prog-head {
+        text-align: center;
+        font-size: 1.125rem;
+        font-weight: 900;
+        color: #0f172a;
+        margin-bottom: 10px;
+      }
+      .prog-track {
+        height: 12px;
+        width: 100%;
+        border-radius: 9999px;
+        background: #e2e8f0;
+        overflow: hidden;
+      }
+      .prog-fill {
+        height: 100%;
+        border-radius: 9999px;
+        background: #059669;
+        transition: width 0.3s ease;
+      }
+      .prog-meta {
+        margin-top: 8px;
+        text-align: center;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e293b;
+      }
+      .prog-sub {
+        margin-top: 4px;
+        text-align: center;
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: #475569;
+      }
+      .btn-green {
+        margin-top: 12px;
+        width: 100%;
+        min-height: 88px;
+        border-radius: 16px;
+        border: 4px solid #047857;
+        background: #059669;
+        color: #fff;
+        font-size: 1.25rem;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.12);
+      }
+      .btn-green:active {
+        transform: scale(0.99);
+      }
+      .btn-green:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .btn-slate {
+        margin-top: 10px;
+        width: 100%;
+        min-height: 56px;
+        border-radius: 12px;
+        border: 0;
+        background: #1e293b;
+        color: #fff;
+        font-size: 1.125rem;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      .btn-slate:active {
+        transform: scale(0.99);
+      }
+      .btn-lock {
+        margin-top: 14px;
+        width: 100%;
+        min-height: 56px;
+        border-radius: 12px;
+        border: 0;
+        background: #047857;
+        color: #fff;
+        font-size: 1.125rem;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      }
+      .btn-lock:active {
+        transform: scale(0.99);
+      }
+      .btn-ghost {
+        margin-top: 8px;
+        background: none;
+        border: 0;
+        color: #047857;
+        font-size: 0.875rem;
+        font-weight: 900;
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 4px 0;
+      }
+      .msg-err {
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        background: #fef2f2;
+        color: #991b1b;
+        font-weight: 800;
+        font-size: 0.9rem;
+      }
+      .msg-ok {
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        background: #ecfdf5;
+        color: #065f46;
+        font-weight: 800;
+        font-size: 0.9rem;
+      }
+      .banner-warn {
+        margin-top: 12px;
+        padding: 16px;
+        border-radius: 16px;
+        border: 4px solid #d97706;
+        background: #fffbeb;
+        font-weight: 700;
+        color: #78350f;
+      }
+      #qrOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: #000;
+        flex-direction: column;
+      }
+      #qrOverlay.open {
+        display: flex;
+      }
+      #qrVideo {
+        flex: 1;
+        width: 100%;
+        object-fit: cover;
+      }
+      .qr-bar {
+        padding: 12px;
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        background: #111;
+      }
+      .qr-close {
+        padding: 10px 16px;
+        border-radius: 10px;
+        border: 0;
+        font-weight: 900;
+        background: #e2e8f0;
+        cursor: pointer;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hdr">
+        <div>
+          <h1>入庫掃描</h1>
+          <p class="sub">現場作業</p>
+        </div>
+      </header>
+
+      <label class="lbl" for="operator">作業人員</label>
+      <input
+        class="inp"
+        id="operator"
+        type="text"
+        value="李大同"
+        autocomplete="name"
+      />
+
+      <div id="phasePick">
+        <label class="lbl" for="orderSel">選擇單據號碼</label>
+        <select class="inp" id="orderSel">
+          <option value="">載入中…</option>
+        </select>
+        <button type="button" class="btn-lock" id="btnLock">鎖定單號</button>
+        <button type="button" class="btn-ghost" id="btnReloadPick">
+          重新載入列表
+        </button>
+      </div>
+
+      <div id="phaseLocked" class="hidden">
+        <div class="order-banner" aria-live="polite">
+          <p>執行單號</p>
+          <p id="lockedOrderLabel">—</p>
+        </div>
+
+        <section class="card">
+          <h2>作業進度</h2>
+          <div id="progEmpty" class="prog-meta" style="color: #64748b">
+            尚未取得本單進度資料
+          </div>
+          <div id="progBox" class="hidden">
+            <div class="prog-head" id="progHead">入庫</div>
+            <div
+              class="prog-track"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+            >
+              <div class="prog-fill" id="progFill" style="width: 0%"></div>
+            </div>
+            <div class="prog-meta" id="progLine1">總量 0／0（0%）</div>
+            <div class="prog-sub" id="progLine2">明細行 0／0 已完成</div>
+          </div>
+          <button type="button" class="btn-ghost" id="btnReloadLocked">
+            重新整理任務資料
+          </button>
+        </section>
+
+        <section class="card">
+          <h2 class="sr-only">料號掃描</h2>
+          <button type="button" class="btn-green" id="btnQr">
+            掃描料號 (QR Code)
+          </button>
+          <label class="lbl" for="manualTag" style="margin-top: 20px"
+            >手動輸入料號</label
+          >
+          <input
+            class="inp"
+            id="manualTag"
+            type="text"
+            placeholder="請輸入或掃描料號"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button type="button" class="btn-slate" id="btnSubmit">
+            確認送出
+          </button>
+        </section>
+
+        <button type="button" class="btn-ghost" id="btnUnlock">
+          改選其他單號
+        </button>
+      </div>
+
+      <div id="msgErr" class="msg-err hidden"></div>
+      <div id="msgOk" class="msg-ok hidden"></div>
+    </div>
+
+    <div id="qrOverlay" aria-hidden="true">
+      <video id="qrVideo" playsinline muted></video>
+      <div class="qr-bar">
+        <button type="button" class="qr-close" id="qrClose">關閉</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var API = "/api/v2/inbound";
+        var tasks = [];
+        var lockedOrder = "";
+
+        var operatorEl = document.getElementById("operator");
+        var orderSel = document.getElementById("orderSel");
+        var btnLock = document.getElementById("btnLock");
+        var btnReloadPick = document.getElementById("btnReloadPick");
+        var phasePick = document.getElementById("phasePick");
+        var phaseLocked = document.getElementById("phaseLocked");
+        var lockedOrderLabel = document.getElementById("lockedOrderLabel");
+        var progEmpty = document.getElementById("progEmpty");
+        var progBox = document.getElementById("progBox");
+        var progFill = document.getElementById("progFill");
+        var progHead = document.getElementById("progHead");
+        var progLine1 = document.getElementById("progLine1");
+        var progLine2 = document.getElementById("progLine2");
+        var btnReloadLocked = document.getElementById("btnReloadLocked");
+        var btnQr = document.getElementById("btnQr");
+        var manualTag = document.getElementById("manualTag");
+        var btnSubmit = document.getElementById("btnSubmit");
+        var btnUnlock = document.getElementById("btnUnlock");
+        var msgErr = document.getElementById("msgErr");
+        var msgOk = document.getElementById("msgOk");
+        var qrOverlay = document.getElementById("qrOverlay");
+        var qrVideo = document.getElementById("qrVideo");
+        var qrClose = document.getElementById("qrClose");
+
+        var qrStream = null;
+        var qrRaf = null;
+        var qrAlive = false;
+
+        function showErr(t) {
+          if (!t) {
+            msgErr.classList.add("hidden");
+            msgErr.textContent = "";
+            return;
+          }
+          msgErr.textContent = t;
+          msgErr.classList.remove("hidden");
+        }
+        function showOk(t) {
+          if (!t) {
+            msgOk.classList.add("hidden");
+            msgOk.textContent = "";
+            return;
+          }
+          msgOk.textContent = t;
+          msgOk.classList.remove("hidden");
+        }
+
+        function normOrder(s) {
+          return String(s || "")
+            .replace(/\uFEFF/g, "")
+            .trim();
+        }
+
+        function uniqOrders(list) {
+          var m = {};
+          for (var i = 0; i < list.length; i++) {
+            var o = normOrder(list[i].order_no);
+            if (o) m[o] = 1;
+          }
+          return Object.keys(m).sort(function (a, b) {
+            return a.localeCompare(b, "zh-Hant");
+          });
+        }
+
+        function progressForOrder(orderNo) {
+          var rows = tasks.filter(function (t) {
+            return normOrder(t.order_no) === normOrder(orderNo);
+          });
+          if (!rows.length) return null;
+          var requiredTotal = 0;
+          var pickedTotal = 0;
+          var doneLines = 0;
+          for (var i = 0; i < rows.length; i++) {
+            var t = rows[i];
+            var req = Number(t.target_qty) || 0;
+            var pk = Number(t.picked_qty) || 0;
+            requiredTotal += req;
+            pickedTotal += pk;
+            if (req > 0 && pk >= req) doneLines++;
+          }
+          var lineCount = rows.length;
+          var pct =
+            requiredTotal > 0
+              ? Math.min(100, Math.round((pickedTotal / requiredTotal) * 100))
+              : 0;
+          return {
+            requiredTotal,
+            pickedTotal,
+            pct,
+            lineCount,
+            doneLines,
+          };
+        }
+
+        function renderProgress() {
+          if (!lockedOrder) return;
+          var p = progressForOrder(lockedOrder);
+          if (!p) {
+            progEmpty.classList.remove("hidden");
+            progBox.classList.add("hidden");
+            return;
+          }
+          progEmpty.classList.add("hidden");
+          progBox.classList.remove("hidden");
+          progHead.textContent = "入庫任務";
+          progFill.style.width = p.pct + "%";
+          progLine1.textContent =
+            "總量 " +
+            p.pickedTotal +
+            "／" +
+            p.requiredTotal +
+            "（" +
+            p.pct +
+            "%）";
+          progLine2.textContent =
+            "明細行 " + p.doneLines + "／" + p.lineCount + " 已完成";
+        }
+
+        async function loadTasks() {
+          showErr("");
+          showOk("");
+          var r = await fetch(API, { credentials: "same-origin" });
+          var j = await r.json().catch(function () {
+            return {};
+          });
+          if (!r.ok) {
+            throw new Error(j.error || "讀取失敗");
+          }
+          tasks = j.tasks || [];
+          return tasks;
+        }
+
+        function fillOrderSelect() {
+          var orders = uniqOrders(tasks);
+          orderSel.innerHTML = "";
+          if (!orders.length) {
+            var o = document.createElement("option");
+            o.value = "";
+            o.textContent = "（無待處理入庫單）";
+            orderSel.appendChild(o);
+            return;
+          }
+          var ph = document.createElement("option");
+          ph.value = "";
+          ph.textContent = "請選擇單據號碼";
+          orderSel.appendChild(ph);
+          orders.forEach(function (no) {
+            var opt = document.createElement("option");
+            opt.value = no;
+            opt.textContent = no;
+            orderSel.appendChild(opt);
+          });
+        }
+
+        async function refreshAll() {
+          await loadTasks();
+          fillOrderSelect();
+          if (lockedOrder) {
+            renderProgress();
+          }
+        }
+
+        function stopQr() {
+          qrAlive = false;
+          if (qrRaf) cancelAnimationFrame(qrRaf);
+          qrRaf = null;
+          if (qrStream) {
+            qrStream.getTracks().forEach(function (t) {
+              t.stop();
+            });
+            qrStream = null;
+          }
+          qrVideo.srcObject = null;
+          qrOverlay.classList.remove("open");
+          qrOverlay.setAttribute("aria-hidden", "true");
+        }
+
+        function openQr() {
+          if (!lockedOrder) {
+            showErr("請先鎖定單號");
+            return;
+          }
+          var BD = window.BarcodeDetector;
+          if (!BD) {
+            showErr("此瀏覽器不支援相機掃描 QR，請改用手動輸入料號。");
+            return;
+          }
+          showErr("");
+          navigator.mediaDevices
+            .getUserMedia({
+              video: { facingMode: { ideal: "environment" } },
+              audio: false,
+            })
+            .then(function (stream) {
+              stopQr();
+              qrStream = stream;
+              qrVideo.srcObject = stream;
+              qrOverlay.classList.add("open");
+              qrOverlay.setAttribute("aria-hidden", "false");
+              return qrVideo.play();
+            })
+            .then(function () {
+              var Detector = window.BarcodeDetector;
+              var detector = new Detector({ formats: ["qr_code"] });
+              qrAlive = true;
+              function tick() {
+                if (!qrAlive) return;
+                if (
+                  qrVideo.readyState >= 2 &&
+                  qrVideo.videoWidth > 0
+                ) {
+                  detector
+                    .detect(qrVideo)
+                    .then(function (codes) {
+                      if (!qrAlive) return;
+                      var raw = codes[0] && codes[0].rawValue
+                        ? String(codes[0].rawValue).trim()
+                        : "";
+                      if (raw) {
+                        qrAlive = false;
+                        stopQr();
+                        manualTag.value = raw;
+                        void doPost(raw);
+                      }
+                    })
+                    .catch(function () {});
+                }
+                if (qrAlive) qrRaf = requestAnimationFrame(tick);
+              }
+              qrRaf = requestAnimationFrame(tick);
+            })
+            .catch(function (e) {
+              showErr(e && e.message ? e.message : "無法開啟相機");
+            });
+        }
+
+        async function doPost(scanRaw) {
+          showErr("");
+          showOk("");
+          var op = normOrder(operatorEl.value);
+          var ord = normOrder(lockedOrder);
+          if (!op) {
+            showErr("請填作業人員");
+            return;
+          }
+          if (!ord) {
+            showErr("請先鎖定單號");
+            return;
+          }
+          var body = {
+            order_no: ord,
+            scan: scanRaw,
+            qty: 1,
+            operator_name: op,
+          };
+          var pr = await fetch(API, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify(body),
+          });
+          var pj = await pr.json().catch(function () {
+            return {};
+          });
+          if (!pr.ok) {
+            showErr(pj.error || "入帳失敗");
+            return;
+          }
+          showOk(
+            "已入帳 · 總帳結餘 " +
+              (pj.balance_after != null ? pj.balance_after : "—"),
+          );
+          manualTag.value = "";
+          await refreshAll();
+        }
+
+        btnReloadPick.onclick = function () {
+          void refreshAll().catch(function (e) {
+            showErr(String(e.message || e));
+          });
+        };
+
+        btnLock.onclick = function () {
+          showErr("");
+          showOk("");
+          var ord = normOrder(orderSel.value);
+          if (!ord) {
+            showErr("請選擇單據號碼");
+            return;
+          }
+          lockedOrder = ord;
+          lockedOrderLabel.textContent = ord;
+          phasePick.classList.add("hidden");
+          phaseLocked.classList.remove("hidden");
+          renderProgress();
+        };
+
+        btnUnlock.onclick = function () {
+          lockedOrder = "";
+          manualTag.value = "";
+          stopQr();
+          phaseLocked.classList.add("hidden");
+          phasePick.classList.remove("hidden");
+          showErr("");
+          showOk("");
+          void refreshAll().catch(function (e) {
+            showErr(String(e.message || e));
+          });
+        };
+
+        btnReloadLocked.onclick = function () {
+          void refreshAll().catch(function (e) {
+            showErr(String(e.message || e));
+          });
+        };
+
+        btnQr.onclick = function () {
+          openQr();
+        };
+
+        qrClose.onclick = function () {
+          stopQr();
+        };
+
+        btnSubmit.onclick = function () {
+          void doPost(manualTag.value);
+        };
+
+        manualTag.onkeydown = function (e) {
+          if (e.key === "Enter") void doPost(manualTag.value);
+        };
+
+        void refreshAll().catch(function (e) {
+          showErr(String(e.message || e));
+        });
+      })();
+    </script>
+  </body>
+</html>

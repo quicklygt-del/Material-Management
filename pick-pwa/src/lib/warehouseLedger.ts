@@ -24,6 +24,16 @@ export const IMPORT_HEADER_GROUPS = {
     "qty_on_hand",
     "quantity_on_hand",
   ],
+  bin_code: [
+    "bin_code",
+    "儲位",
+    "储位",
+    "庫位",
+    "库位",
+    "location",
+    "loc",
+    "bin",
+  ],
 } as const;
 
 export type WarehouseLedgerDirection = "inbound" | "outbound";
@@ -32,8 +42,20 @@ export function normLedgerItemNo(raw: unknown): string {
   return String(raw ?? "").replace(/\uFEFF/g, "").trim();
 }
 
+/** 舊版 warehouse_ledger_lines 無儲位／tx_type 等欄時，插入前剔除 */
+export function stripExtendedWarehouseLedgerLineCols(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const legacy = { ...row };
+  delete legacy.tx_type;
+  delete legacy.from_bin;
+  delete legacy.to_bin;
+  delete legacy.operator_name;
+  delete legacy.bin_balance_after;
+  return legacy;
+}
+
 export type WarehouseLedgerPostBody = {
-  ?: string;
   item_no: string;
   direction: WarehouseLedgerDirection;
   qty: number;
@@ -47,6 +69,15 @@ export type WarehouseLedgerPostBody = {
 };
 
 /** 非同步調帳：不向掃描流程 await，以降低現場頓點 */
+/** 與單位標籤列印頁預設一致：QR 僅含料號／品名／規格（不含儲位） */
+export function buildLedgerQrPayloadNoBin(
+  itemNo: string,
+  itemName: string,
+  spec: string,
+): string {
+  return [itemNo.trim(), itemName.trim(), spec.trim()].join("\n");
+}
+
 export function fireWarehouseLedgerPostMove(body: WarehouseLedgerPostBody): void {
   if (typeof window === "undefined") return;
   void fetch(`${window.location.origin}/api/warehouse-ledger/post-move`, {

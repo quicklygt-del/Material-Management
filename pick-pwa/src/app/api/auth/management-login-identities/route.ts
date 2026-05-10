@@ -3,11 +3,6 @@ import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
-import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import { getStorageZonesScopeColumn } from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -23,28 +18,19 @@ function sortUsernames(usernames: string[]): string[] {
   return u;
 }
 
-/**
- * 首頁登入帳號清單（依租戶篩選）：
- * app_users、warehouse_operators（company_id）、storage_zones（範圍欄位見 storageZonesScope）。
- */
-export async function GET(req: Request) {
+/** 首頁登入帳號清單 */
+export async function GET() {
   const adminClient = getSupabaseServiceRoleClient();
   if (!adminClient) {
     return missingServiceRoleResponse();
   }
 
-  const url = new URL(req.url);
-  const tenantParam = url.searchParams.get("tenant")?.trim() ?? "";
-  const tenantId =
-    normalizeLabelPrefix(tenantParam) ||
-    normalizeLabelPrefix(getDefaultLabelPrefix());
   const seen = new Set<string>();
 
   const { data: appRows, error: appErr } = await adminClient
     .from("app_users")
-    .select("username,role,company_id")
-    .in("role", ["admin", "system_admin", "warehouse_admin"])
-    .eq("company_id", tenantId);
+    .select("username,role")
+    .in("role", ["admin", "system_admin", "warehouse_admin"]);
 
   if (appErr) {
     return NextResponse.json(
@@ -61,8 +47,7 @@ export async function GET(req: Request) {
   const { data: opRows, error: opErr } = await adminClient
     .from("warehouse_operators")
     .select("name")
-    .eq("active", true)
-    .eq("company_id", tenantId);
+    .eq("active", true);
 
   if (opErr) {
     return NextResponse.json(
@@ -76,11 +61,9 @@ export async function GET(req: Request) {
     if (name) seen.add(name);
   }
 
-  const szCol = getStorageZonesScopeColumn();
   const { data: zoneRows, error: zoneErr } = await adminClient
     .from("storage_zones")
-    .select("portal_login")
-    .eq(szCol, tenantId);
+    .select("portal_login");
 
   if (zoneErr) {
     return NextResponse.json(
@@ -96,5 +79,5 @@ export async function GET(req: Request) {
 
   const usernames = sortUsernames(Array.from(seen));
 
-  return NextResponse.json({ usernames, tenant: tenantId });
+  return NextResponse.json({ usernames });
 }

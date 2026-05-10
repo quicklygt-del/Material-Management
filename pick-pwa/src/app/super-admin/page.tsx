@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
-type TenantRow = {
-  tenant_code: string;
-  tenant_slug: string;
+type RegistryEntry = {
+  numeric_code: string;
+  public_slug: string;
   company_name: string;
   status: string;
   feature_warehouse_ledger: boolean;
@@ -17,7 +17,7 @@ type TenantRow = {
 export default function SuperAdminHomePage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
-  const [tenants, setTenants] = useState<TenantRow[]>([]);
+  const [entries, setEntries] = useState<RegistryEntry[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -27,18 +27,18 @@ export default function SuperAdminHomePage() {
     const r = await fetch("/api/super-admin/session");
     const s = (await r.json()) as { authenticated?: boolean };
     if (!s.authenticated) {
-      router.replace(withTenantParam("/super-admin/login"));
+      router.replace(appHref("/super-admin/login"));
       return false;
     }
 
-    const tr = await fetch("/api/super-admin/tenants");
+    const tr = await fetch("/api/super-admin/registry");
     if (!tr.ok) {
       const j = (await tr.json().catch(() => ({}))) as { error?: string };
-      setMsg(j.error || "載入租戶失敗");
+      setMsg(j.error || "載入失敗");
       return true;
     }
-    const tj = (await tr.json()) as { tenants?: TenantRow[] };
-    setTenants(tj.tenants ?? []);
+    const tj = (await tr.json()) as { entries?: RegistryEntry[] };
+    setEntries(tj.entries ?? []);
     return true;
   }, [router]);
 
@@ -51,19 +51,19 @@ export default function SuperAdminHomePage() {
 
   const logout = async () => {
     await fetch("/api/super-admin/logout", { method: "POST" });
-    router.replace(withTenantParam("/super-admin/login"));
+    router.replace(appHref("/super-admin/login"));
   };
 
-  const onCreateTenant = async () => {
+  const onCreateEntry = async () => {
     const nm = companyName.trim();
     if (!nm) {
-      setMsg("請輸入公司名稱");
+      setMsg("請輸入顯示名稱");
       return;
     }
     setCreating(true);
     setMsg(null);
     try {
-      const res = await fetch("/api/super-admin/tenants", {
+      const res = await fetch("/api/super-admin/registry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ company_name: nm }),
@@ -82,13 +82,10 @@ export default function SuperAdminHomePage() {
     }
   };
 
-  const toggleLedger = async (
-    code: string,
-    next: boolean,
-  ) => {
+  const toggleLedger = async (code: string, next: boolean) => {
     setMsg(null);
     const res = await fetch(
-      `/api/super-admin/tenants/${encodeURIComponent(code)}`,
+      `/api/super-admin/registry/${encodeURIComponent(code)}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -106,7 +103,7 @@ export default function SuperAdminHomePage() {
   const toggleStatus = async (code: string, active: boolean) => {
     setMsg(null);
     const res = await fetch(
-      `/api/super-admin/tenants/${encodeURIComponent(code)}`,
+      `/api/super-admin/registry/${encodeURIComponent(code)}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -137,12 +134,12 @@ export default function SuperAdminHomePage() {
         <div>
           <h1 className="text-2xl font-black text-white">Super Admin 總控</h1>
           <p className="mt-1 text-xs font-bold text-slate-400">
-            租戶 SaaS 管理（000–999）／倉儲總帳模組開關
+            平台註冊表（000–999）／倉儲總帳模組開關
           </p>
         </div>
         <div className="flex gap-2">
           <Link
-            href={withTenantParam("/super-admin/label-templates")}
+            href={appHref("/super-admin/label-templates")}
             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-black text-amber-300"
           >
             標籤格式公版
@@ -164,26 +161,24 @@ export default function SuperAdminHomePage() {
       ) : null}
 
       <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-        <h2 className="text-lg font-black text-amber-400">新增租戶</h2>
+        <h2 className="text-lg font-black text-amber-400">新增一筆</h2>
         <p className="mt-1 text-xs text-slate-400">
-          系統自動發放 <code className="rounded bg-slate-800 px-1">tenant_code</code>（3
-          碼）與唯一 <code className="rounded bg-slate-800 px-1">tenant_slug</code>；
-          請在 app_users／warehouse_operators 使用相同 company_id 對應 slug。
+          系統自動發放 3 碼代碼與唯一公開 slug；建立後於後台設定登入帳號。
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <input
             className="min-w-[12rem] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm font-bold text-white"
-            placeholder="公司名稱"
+            placeholder="顯示名稱"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
           />
           <button
             type="button"
             disabled={creating}
-            onClick={() => void onCreateTenant()}
+            onClick={() => void onCreateEntry()}
             className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50"
           >
-            {creating ? "建立中…" : "建立租戶"}
+            {creating ? "建立中…" : "建立"}
           </button>
         </div>
       </section>
@@ -193,20 +188,20 @@ export default function SuperAdminHomePage() {
           <thead className="bg-slate-900 font-black text-xs uppercase text-slate-500">
             <tr>
               <th className="px-3 py-2">代碼</th>
-              <th className="px-3 py-2">Slug</th>
-              <th className="px-3 py-2">公司</th>
+              <th className="px-3 py-2">公開 slug</th>
+              <th className="px-3 py-2">名稱</th>
               <th className="px-3 py-2">狀態</th>
               <th className="px-3 py-2">倉儲總帳</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-slate-950/70">
-            {tenants.map((t) => (
-              <tr key={t.tenant_code} className="font-semibold">
+            {entries.map((t) => (
+              <tr key={t.numeric_code} className="font-semibold">
                 <td className="px-3 py-2 font-mono text-amber-200">
-                  {t.tenant_code}
+                  {t.numeric_code}
                 </td>
                 <td className="px-3 py-2 font-mono text-sky-300">
-                  {t.tenant_slug}
+                  {t.public_slug}
                 </td>
                 <td className="max-w-[10rem] truncate px-3 py-2 text-slate-200">
                   {t.company_name}
@@ -216,7 +211,7 @@ export default function SuperAdminHomePage() {
                     type="button"
                     onClick={() =>
                       void toggleStatus(
-                        t.tenant_code,
+                        t.numeric_code,
                         t.status !== "active",
                       )
                     }
@@ -234,7 +229,7 @@ export default function SuperAdminHomePage() {
                     type="button"
                     onClick={() =>
                       void toggleLedger(
-                        t.tenant_code,
+                        t.numeric_code,
                         !t.feature_warehouse_ledger,
                       )
                     }
@@ -251,12 +246,9 @@ export default function SuperAdminHomePage() {
             ))}
           </tbody>
         </table>
-        {!tenants.length ? (
+        {!entries.length ? (
           <p className="p-6 text-center text-xs text-slate-500">
-            尚無資料；請確認已執行{" "}
-            <code className="rounded bg-slate-800 px-1">
-              patch_multi_tenant_saas.sql
-            </code>
+            尚無資料；請確認資料庫已建立對應資料表與初始資料。
           </p>
         ) : null}
       </section>

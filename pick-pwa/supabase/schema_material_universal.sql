@@ -11,7 +11,7 @@ create table if not exists public.material_transactions (
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_material_tx_tenant_item
+create index if not exists idx_material_tx__item
   on public.material_transactions (, material_item_no);
 create index if not exists idx_material_tx_label
   on public.material_transactions (label_record_id);
@@ -38,7 +38,7 @@ create table if not exists public.universal_ledger_records (
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_universal_ledger_tenant_unit
+create index if not exists idx_universal_ledger__unit
   on public.universal_ledger_records (, unit_id);
 create index if not exists idx_universal_ledger_label_unit
   on public.universal_ledger_records (label_record_id, unit_id);

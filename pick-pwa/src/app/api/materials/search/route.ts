@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
@@ -17,7 +13,7 @@ function escapeIlike(s: string): string {
 const MATERIAL_TYPES = ["S", "R", "B", "Q"] as const;
 
 const SELECT_FIELDS =
-  "id,,label_type,qr_payload,item_no,color_code,created_at,meta";
+  "id,label_type,qr_payload,item_no,color_code,created_at,meta";
 
 /** 搜尋已建檔物料（Excel／標籤中心匯入）：料號、品名、說明等 */
 export async function GET(req: Request) {
@@ -27,18 +23,12 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const  =
-    normalizeLabelPrefix(url.searchParams.get("tenant") ?? "") ||
-    getDefaultLabelPrefix();
   const qRaw = url.searchParams.get("q")?.trim() ?? "";
   const limit = Math.min(
     40,
     Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "20", 10) || 20),
   );
 
-  if (!) {
-    return NextResponse.json({ error: "無法解析公司識別" }, { status: 400 });
-  }
   if (!qRaw) {
     return NextResponse.json({ materials: [] });
   }
@@ -46,11 +36,7 @@ export async function GET(req: Request) {
   const pattern = `%${escapeIlike(qRaw)}%`;
 
   const base = () =>
-    admin
-      .from("label_records")
-      .select(SELECT_FIELDS)
-      .eq("", )
-      .in("label_type", [...MATERIAL_TYPES]);
+    admin.from("label_records").select(SELECT_FIELDS).in("label_type", [...MATERIAL_TYPES]);
 
   const [byItem, byDesc, byProduct, bySpec] = await Promise.all([
     base()

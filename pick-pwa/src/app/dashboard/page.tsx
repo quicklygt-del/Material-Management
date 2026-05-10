@@ -1,8 +1,18 @@
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = {
-  title: "AI 智能 QR 管理系統",
-};
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { MonitorDashboard } from "@/components/monitor/MonitorDashboard";
+import { getSessionUser } from "@/lib/auth";
 
-export { default } from "../page";
+export default function DashboardMonitorPage() {
+  const router = useRouter();
 
+  useEffect(() => {
+    if (!getSessionUser()) {
+      router.replace("/");
+    }
+  }, [router]);
+
+  return <MonitorDashboard />;
+}

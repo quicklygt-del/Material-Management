@@ -3,7 +3,7 @@
 import { Bluetooth } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -14,15 +14,16 @@ import {
   type ExcelLabelBatchItem,
   type LabelTemplateField,
 } from "@/lib/labelPrintTemplate";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 const QR_MAX = 1200;
+
+const NOT_FOUND_HINT = "（未查獲料號，請手動輸入）";
 
 type UnitCtxLite = {
   unit_id: string;
   slug: string;
   name: string;
-  : string;
   label_template_id: string | null;
 };
 
@@ -38,6 +39,8 @@ type PrintFmt =
   | "label-40x40"
   | "label-100x150"
   | "custom";
+
+type MaterialTab = "raw" | "special";
 
 function clampMm(n: number): number {
   if (!Number.isFinite(n)) return 50;
@@ -67,7 +70,42 @@ function qrSizesFor(printSize: PrintFmt, cw: number, ch: number) {
   }
 }
 
+function buildQrFromManual(
+  fields: LabelTemplateField[],
+  itemNo: string,
+  itemName: string,
+  spec: string,
+): string {
+  const nameTrim = itemName.trim();
+  const specTrim = spec.trim();
+  const effectiveName = nameTrim === NOT_FOUND_HINT ? "" : nameTrim;
+  const parts: string[] = [];
+  for (const f of fields) {
+    if (f.key === "print_count") continue;
+    switch (f.key) {
+      case "item_no":
+        parts.push(itemNo.trim());
+        break;
+      case "item_name":
+        parts.push(effectiveName);
+        break;
+      case "spec":
+        parts.push(specTrim);
+        break;
+      case "batch_no":
+      case "supplier_code":
+      case "remark":
+        parts.push("");
+        break;
+      default:
+        parts.push("");
+    }
+  }
+  return parts.join("\n");
+}
+
 export default function UnitLabelPrintPage() {
+  const router = useRouter();
   const params = useParams();
   const slugParam = decodeURIComponent(String(params.slug ?? ""));
   const [ctx, setCtx] = useState<UnitCtxLite | null>(null);
@@ -76,17 +114,21 @@ export default function UnitLabelPrintPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [materialTab, setMaterialTab] = useState<MaterialTab>("raw");
+  const [itemNo, setItemNo] = useState("");
+  const [itemName, setItemName] = useState("");
+  const [spec, setSpec] = useState("");
+  const [matchedFromMaster, setMatchedFromMaster] = useState(false);
+
   const [printSize, setPrintSize] = useState<PrintFmt>("label-50x30");
   const [customWmm, setCustomWmm] = useState(50);
   const [customHmm, setCustomHmm] = useState(30);
-  /** 手動模式：同一 QR 內容要印幾張（預設 1）；Excel 批次時由試算表決定，此欄停用 */
   const [printCopiesStr, setPrintCopiesStr] = useState("1");
-  /** Excel 批次：每列獨立張數 */
   const [excelBatch, setExcelBatch] = useState<{
     items: ExcelLabelBatchItem[];
   } | null>(null);
+  const [excelFileStatus, setExcelFileStatus] = useState<string | null>(null);
 
-  /** 來自後台範本或預設四欄 */
   const [labelFields, setLabelFields] = useState<LabelTemplateField[]>(() =>
     getDefaultLabelTemplateFields(),
   );
@@ -118,7 +160,6 @@ export default function UnitLabelPrintPage() {
         unit_id: String(j.unit_id ?? ""),
         slug: String(j.slug ?? ""),
         name: String(j.name ?? ""),
-        : String(j. ?? ""),
         label_template_id: j.label_template_id
           ? String(j.label_template_id)
           : null,
@@ -133,6 +174,65 @@ export default function UnitLabelPrintPage() {
       alive = false;
     };
   }, []);
+
+  const clearExcelBatch = useCallback(() => {
+    setExcelBatch(null);
+    setExcelFileStatus(null);
+  }, []);
+
+  useEffect(() => {
+    if (excelBatch) return;
+    setContent(
+      buildQrFromManual(labelFields, itemNo, itemName, spec),
+    );
+  }, [excelBatch, labelFields, itemNo, itemName, spec]);
+
+  const lookupMaterial = useCallback(async () => {
+    const key = itemNo.trim();
+    if (!key) {
+      setItemName("");
+      setSpec("");
+      setMatchedFromMaster(false);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/material-master/lookup?item_no=${encodeURIComponent(key)}`,
+      );
+      const j = (await res.json().catch(() => ({}))) as {
+        found?: boolean;
+        item_name?: string;
+        spec?: string;
+        error?: string;
+      };
+      if (!res.ok && j.error) {
+        setItemName(NOT_FOUND_HINT);
+        setSpec("");
+        setMatchedFromMaster(false);
+        return;
+      }
+      if (j.found) {
+        setItemName(j.item_name ?? "");
+        setSpec(j.spec ?? "");
+        setMatchedFromMaster(true);
+      } else {
+        setItemName(NOT_FOUND_HINT);
+        setSpec("");
+        setMatchedFromMaster(false);
+      }
+    } catch {
+      setItemName(NOT_FOUND_HINT);
+      setSpec("");
+      setMatchedFromMaster(false);
+    }
+  }, [itemNo]);
+
+  const onItemNoKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void lookupMaterial();
+    }
+  };
 
   const qrValue = content.trim().slice(0, QR_MAX);
   const excelLocked = Boolean(excelBatch);
@@ -219,15 +319,14 @@ export default function UnitLabelPrintPage() {
         setMsg("請輸入內容");
         throw new Error("請輸入內容");
       }
-      const itemNo = deriveItemNoForRecord(trimmed, labelFields);
+      const itemNoRec = deriveItemNoForRecord(trimmed, labelFields);
       const res = await fetch("/api/label-records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          : ctx.,
           label_type: "UNIVERSAL",
           qr_payload: trimmed,
-          item_no: itemNo,
+          item_no: itemNoRec,
           color_code: null,
           operator_id: "unit_label_print",
           meta: {
@@ -283,10 +382,27 @@ export default function UnitLabelPrintPage() {
       ? labelFields.findIndex((f) => f.key === "print_count") + 1
       : 0;
 
-  const onExcelSelected = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
+  const ingestExcelBuffer = useCallback(
+    (buf: ArrayBuffer, fileLabel: string) => {
+      try {
+        const items = parseExcelLabelBatchWithTemplate(buf, labelFields);
+        setExcelBatch({ items });
+        setContent(items[0]?.qrText ?? "");
+        setPrintCopiesStr("1");
+        setExcelFileStatus(`✅ 已載入清單：${fileLabel}`);
+        setMsg(null);
+      } catch (err) {
+        setExcelFileStatus(null);
+        setMsg(
+          err instanceof Error ? err.message : "Excel 解析失敗",
+        );
+      }
+    },
+    [labelFields],
+  );
+
+  const processExcelFile = useCallback(
+    (file: File | undefined) => {
       if (!file) return;
       setMsg(null);
       const reader = new FileReader();
@@ -294,23 +410,46 @@ export default function UnitLabelPrintPage() {
         const buf = reader.result;
         if (!(buf instanceof ArrayBuffer)) {
           setMsg("無法讀取檔案");
+          setExcelFileStatus(null);
           return;
         }
-        try {
-          const items = parseExcelLabelBatchWithTemplate(buf, labelFields);
-          setExcelBatch({ items });
-          setContent(items[0]?.qrText ?? "");
-          setPrintCopiesStr("1");
-        } catch (err) {
-          setMsg(
-            err instanceof Error ? err.message : "Excel 解析失敗",
-          );
-        }
+        ingestExcelBuffer(buf, file.name);
       };
-      reader.onerror = () => setMsg("讀取檔案失敗");
+      reader.onerror = () => {
+        setMsg("讀取檔案失敗");
+        setExcelFileStatus(null);
+      };
       reader.readAsArrayBuffer(file);
     },
-    [labelFields],
+    [ingestExcelBuffer],
+  );
+
+  const onExcelSelected = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      processExcelFile(file);
+    },
+    [processExcelFile],
+  );
+
+  const onExcelDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const f = e.dataTransfer.files?.[0];
+      if (
+        f &&
+        /\.(xlsx|xls)$/i.test(f.name) &&
+        (f.type ===
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+          f.type === "application/vnd.ms-excel" ||
+          f.type === "")
+      ) {
+        processExcelFile(f);
+      }
+    },
+    [processExcelFile],
   );
 
   const requestBluetoothPrinter = useCallback(async () => {
@@ -359,12 +498,17 @@ export default function UnitLabelPrintPage() {
 
   const canPrint = Boolean(printSlots.length > 0) && !customInvalid;
 
+  const selectAllQtyInput = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    requestAnimationFrame(() => el.select());
+  };
+
   if (ctxErr) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center text-sm font-black text-red-700">
         {ctxErr}
         <Link
-          href={withTenantParam("/other-operations")}
+          href={appHref("/other-operations")}
           className="mt-6 inline-block underline"
         >
           重新登入
@@ -394,12 +538,13 @@ export default function UnitLabelPrintPage() {
       <style id="label-print-page-def">{pageCss}</style>
 
       <main className="mx-auto min-h-[100dvh] max-w-2xl bg-[#FAFCFC] px-4 pb-24 pt-[max(0.75rem,env(safe-area-inset-top))] print:hidden">
-        <Link
-          href={`/unit/${encodeURIComponent(ctx.slug)}`}
+        <button
+          type="button"
+          onClick={() => router.back()}
           className="text-sm font-bold text-purple-800 underline"
         >
-          ← 返回作業
-        </Link>
+          ← 返回前一頁
+        </button>
         <div className="mt-4 rounded-2xl border border-purple-100 bg-purple-50/80 px-4 py-3">
           <p className="text-[11px] font-black tracking-wide text-purple-700">
             單位名稱
@@ -424,45 +569,102 @@ export default function UnitLabelPrintPage() {
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
           <div>
-            <label className="text-sm font-bold text-zinc-800">內容說明</label>
-            {excelBatchEnabled ? (
-              <div className="mt-2">
-                <input
-                  ref={excelInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                  className="sr-only"
-                  onChange={onExcelSelected}
-                  disabled={busy}
-                  aria-hidden
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => excelInputRef.current?.click()}
-                  className="rounded-xl border-2 border-purple-600 bg-white px-4 py-2.5 text-sm font-black text-purple-900 shadow-sm active:scale-[0.98] disabled:opacity-40"
-                >
-                  Excel 上傳
-                </button>
-                <p className="mt-1.5 text-[11px] font-semibold text-zinc-500">
-                  {excelColumnHint}（可含標題列）；右側顯示品項數與總張數。「列印張數」可由後台換欄位語意鍵{' '}
-                  <span className="font-mono">print_count</span> 的那一欄。
-                </p>
-              </div>
-            ) : null}
-            <textarea
-              className="mt-2 min-h-[8rem] w-full rounded-xl border border-zinc-300 p-3 text-base"
-              value={content}
+            <h2 className="text-base font-black text-slate-900">
+              單筆即時輸入
+            </h2>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMaterialTab("raw")}
+                className={`rounded-lg px-4 py-2 text-sm font-black transition-colors ${
+                  materialTab === "raw"
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-slate-700 ring-1 ring-slate-200"
+                }`}
+              >
+                原物料
+              </button>
+              <button
+                type="button"
+                onClick={() => setMaterialTab("special")}
+                className={`rounded-lg px-4 py-2 text-sm font-black transition-colors ${
+                  materialTab === "special"
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-slate-700 ring-1 ring-slate-200"
+                }`}
+              >
+                特殊
+              </button>
+            </div>
+
+            <label
+              className="mt-4 block text-[1.3rem] font-black text-zinc-900"
+              htmlFor="unit-label-item-no"
+            >
+              料號（ENTER 下一步）
+            </label>
+            <input
+              id="unit-label-item-no"
+              className="mt-2 w-full rounded-xl border border-zinc-300 p-3 text-base font-bold"
+              placeholder="請輸入…"
+              value={itemNo}
               onChange={(e) => {
-                setContent(e.target.value);
-                setExcelBatch(null);
+                setItemNo(e.target.value);
+                clearExcelBatch();
               }}
-              disabled={busy}
+              onBlur={() => void lookupMaterial()}
+              onKeyDown={onItemNoKeyDown}
+              disabled={busy || excelLocked}
+              autoComplete="off"
             />
-            <label className="mt-4 block text-sm font-bold text-zinc-800">
-              列印尺寸
+
+            <div className="mt-4 rounded-xl border border-dashed border-zinc-400 bg-zinc-50/80 p-4">
+              <label
+                className="block text-[1.3rem] font-black text-zinc-900"
+                htmlFor="unit-label-item-name"
+              >
+                品名
+              </label>
+              <input
+                id="unit-label-item-name"
+                className="mt-2 w-full border-0 bg-transparent text-base font-bold text-zinc-800 outline-none placeholder:text-zinc-400"
+                placeholder="---"
+                value={itemName}
+                onChange={(e) => {
+                  setItemName(e.target.value);
+                  clearExcelBatch();
+                }}
+                readOnly={matchedFromMaster}
+                disabled={busy || excelLocked}
+              />
+              <label
+                className="mt-3 block text-[1.3rem] font-black text-zinc-900"
+                htmlFor="unit-label-spec"
+              >
+                規格
+              </label>
+              <input
+                id="unit-label-spec"
+                className="mt-2 w-full border-0 bg-transparent text-base font-bold text-zinc-800 outline-none placeholder:text-zinc-400"
+                placeholder="---"
+                value={spec}
+                onChange={(e) => {
+                  setSpec(e.target.value);
+                  clearExcelBatch();
+                }}
+                readOnly={matchedFromMaster}
+                disabled={busy || excelLocked}
+              />
+            </div>
+
+            <label
+              className="mt-4 block text-[1.3rem] font-black text-zinc-900"
+              htmlFor="unit-label-print-size"
+            >
+              標籤常用尺寸選擇
             </label>
             <select
+              id="unit-label-print-size"
               className="mt-2 w-full rounded-xl border border-zinc-300 p-3 font-bold"
               value={printSize}
               onChange={(e) => {
@@ -476,8 +678,8 @@ export default function UnitLabelPrintPage() {
               disabled={busy}
             >
               <option value="a4">A4 紙張</option>
-              <option value="label-30x20">標籤貼紙 30×20 mm</option>
-              <option value="label-50x30">標籤貼紙 50×30 mm</option>
+              <option value="label-30x20">物料小標（30×20 mm）</option>
+              <option value="label-50x30">物料小標（50×30 mm）</option>
               <option value="label-80x45">標籤貼紙 80×45 mm</option>
               <option value="label-40x40">標籤貼紙 40×40 mm</option>
               <option value="label-100x150">
@@ -485,27 +687,6 @@ export default function UnitLabelPrintPage() {
               </option>
               <option value="custom">自訂尺寸（mm）</option>
             </select>
-
-            <label className="mt-3 block text-xs font-bold text-zinc-600">
-              列印張數
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="mt-1 w-full rounded-xl border border-zinc-300 p-2.5 text-base font-bold disabled:bg-zinc-100 disabled:text-zinc-500"
-              placeholder="1"
-              value={printCopiesStr}
-              onChange={(e) => setPrintCopiesStr(e.target.value)}
-              disabled={busy || excelLocked}
-              autoComplete="off"
-              title={
-                excelLocked
-                  ? `Excel 批次下列印張數由試算表第 ${printCountOrdinal} 欄（列印張數）決定`
-                  : "相同內容要印幾張標籤"
-              }
-              aria-label="列印張數"
-            />
 
             {printSize === "custom" ? (
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -544,30 +725,132 @@ export default function UnitLabelPrintPage() {
               </div>
             ) : null}
 
+            <div className="mt-6 flex flex-wrap items-stretch gap-3">
+              <button
+                type="button"
+                disabled={busy || !canPrint}
+                onClick={() => void saveThenPrint()}
+                className="min-h-[3.25rem] flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-lg font-black text-white shadow-lg disabled:opacity-40"
+              >
+                {busy ? "存檔並開啟列印…" : "列印"}
+              </button>
+              <div className="flex w-[5.5rem] shrink-0 flex-col justify-center rounded-xl border border-zinc-300 bg-white px-2 py-2">
+                <label
+                  className="text-center text-[1.3rem] font-black leading-none text-zinc-900"
+                  htmlFor="unit-label-print-qty"
+                >
+                  張數
+                </label>
+                <input
+                  id="unit-label-print-qty"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="mt-1 w-full border-0 bg-transparent p-0 text-center text-lg font-black text-blue-700 outline-none disabled:text-zinc-400"
+                  placeholder="1"
+                  value={printCopiesStr}
+                  onChange={(e) => {
+                    setPrintCopiesStr(e.target.value);
+                    clearExcelBatch();
+                  }}
+                  onFocus={(e) => selectAllQtyInput(e.target)}
+                  onClick={(e) => selectAllQtyInput(e.currentTarget)}
+                  disabled={busy || excelLocked}
+                  autoComplete="off"
+                  title={
+                    excelLocked
+                      ? `Excel 批次下列印張數由試算表第 ${printCountOrdinal} 欄（列印張數）決定`
+                      : "相同內容要印幾張標籤"
+                  }
+                  aria-label="張數"
+                />
+              </div>
+            </div>
+
             {btDeviceLabel ? (
               <p className="mt-3 text-xs font-bold text-emerald-800">
                 藍牙：{btDeviceLabel}
               </p>
             ) : null}
           </div>
-          <div className="rounded-2xl border border-purple-100 bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold text-purple-900">預覽</p>
-            {excelBatch ? (
-              <p className="mt-2 rounded-lg bg-purple-50 px-3 py-2 text-center text-sm font-black leading-snug text-purple-950">
-                已讀取 {excelTotalItems} 個品項，共將產出 {excelTotalSheets}{" "}
-                張標籤
-              </p>
-            ) : null}
-            <div className="mt-3 flex flex-col items-center gap-2">
-              {previewQrPayload ? (
-                <QRCodeSVG
-                  value={previewQrPayload}
-                  size={previewQrSize}
-                  level="M"
+
+          <div className="flex flex-col gap-4">
+            {excelBatchEnabled ? (
+              <div>
+                <h2 className="text-base font-black text-slate-900">
+                  整批清單列印（Excel 上傳）
+                </h2>
+                <input
+                  ref={excelInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  className="sr-only"
+                  onChange={onExcelSelected}
+                  disabled={busy}
+                  aria-hidden
                 />
-              ) : (
-                <p className="py-12 text-xs text-zinc-400">請輸入內容</p>
-              )}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      excelInputRef.current?.click();
+                    }
+                  }}
+                  onClick={() => excelInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={onExcelDrop}
+                  className="mt-3 cursor-pointer rounded-2xl border-2 border-dashed border-purple-300 bg-white p-6 text-center shadow-sm"
+                >
+                  <p className="text-sm font-black text-purple-950">
+                    點擊或拖放 Excel 至此
+                  </p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                    EXCEL UPLOAD AREA
+                  </p>
+                </div>
+                {excelFileStatus ? (
+                  <p className="mt-2 text-sm font-bold text-emerald-800">
+                    {excelFileStatus}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-[11px] font-semibold text-zinc-500">
+                  {excelColumnHint}（可含標題列）；下方顯示品項數與總張數。「列印張數」為{' '}
+                  <span className="font-mono">print_count</span> 欄。
+                </p>
+              </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-purple-100 bg-white p-4 shadow-sm">
+              <p className="text-xs font-black uppercase tracking-wide text-purple-900">
+                Live preview
+              </p>
+              {excelBatch ? (
+                <p className="mt-2 rounded-lg bg-purple-50 px-3 py-2 text-center text-sm font-black leading-snug text-purple-950">
+                  已讀取 {excelTotalItems} 個品項，共將產出 {excelTotalSheets}{" "}
+                  張標籤
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-col items-center gap-2">
+                {previewQrPayload ? (
+                  <QRCodeSVG
+                    value={previewQrPayload}
+                    size={previewQrSize}
+                    level="M"
+                  />
+                ) : (
+                  <p className="py-12 text-xs text-zinc-400">請輸入內容</p>
+                )}
+                {printSize === "label-50x30" ? (
+                  <p className="text-[11px] font-bold text-zinc-500">
+                    50mm × 30mm
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -582,14 +865,6 @@ export default function UnitLabelPrintPage() {
             aria-label="藍牙配對標籤機"
           >
             <Bluetooth className="h-8 w-8" strokeWidth={2} aria-hidden />
-          </button>
-          <button
-            type="button"
-            disabled={busy || !canPrint}
-            onClick={() => void saveThenPrint()}
-            className="min-h-[3.5rem] flex-1 rounded-xl bg-purple-700 px-4 py-4 text-lg font-black text-white shadow-lg disabled:opacity-40"
-          >
-            {busy ? "存檔並開啟列印…" : "列印標籤"}
           </button>
         </div>
 

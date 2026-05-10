@@ -1,10 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WarehouseLedgerDirection } from "@/lib/warehouseLedger";
+import {
+  stripExtendedWarehouseLedgerLineCols,
+  type WarehouseLedgerDirection,
+} from "@/lib/warehouseLedger";
+import {
+  applyBinDelta,
+  binStockTableReady,
+  LEDGER_DEFAULT_BIN,
+  normLedgerBinCode,
+  reconcileLedgerTotalFromBins,
+} from "@/lib/ledgerBinCore";
 
 export type LedgerMoveRef = Record<string, unknown>;
 
 export type WarehouseLedgerMoveParams = {
-  tenantId: string;
   itemNo: string;
   direction: WarehouseLedgerDirection;
   qty: number;
@@ -12,6 +21,17 @@ export type WarehouseLedgerMoveParams = {
   ref: LedgerMoveRef;
   seedItemName?: string;
   seedSpec?: string;
+  /** 出庫／移出時之儲位；未填且已啟用儲位表時為預設儲位 */
+  fromBin?: string | null;
+  /** 入庫／移入時之儲位；未填且已啟用儲位表時為預設儲位 */
+  toBin?: string | null;
+  /** 異動軌跡類型（預設由 direction 推導；例如 special_issue） */
+  ledgerLineTxType?:
+    | "inbound"
+    | "outbound"
+    | "special_issue"
+    | "transfer"
+    | "stocktake";
 };
 
 function refText(ref: LedgerMoveRef, key: string): string {
@@ -39,7 +59,7 @@ async function syncPickingProgressAfterLedgerMove(
     let q = admin
       .from("picking_tasks")
       .select(columns)
-      .eq("item_code", p.itemNo);
+      .eq("item_no", p.itemNo);
     if (orderNo) q = q.eq("order_no", orderNo);
     else if (taskId) q = q.eq("id", taskId);
     else return null;
@@ -48,11 +68,11 @@ async function syncPickingProgressAfterLedgerMove(
 
   let supportsPickedQty = true;
   let taskQuery = buildTaskQuery(
-    "id,order_no,item_code,target_qty,status,started_at,operation_type,picked_qty",
+    "id,order_no,item_no,target_qty,status,started_at,operation_type,picked_qty",
   );
   if (!taskQuery) return;
 
-  let taskPick = await taskQuery.maybeSingle();
+  const taskPick = await taskQuery.maybeSingle();
   let taskRow = taskPick.data;
   let taskErr = taskPick.error;
   if (
@@ -63,7 +83,7 @@ async function syncPickingProgressAfterLedgerMove(
   ) {
     supportsPickedQty = false;
     taskQuery = buildTaskQuery(
-      "id,order_no,item_code,target_qty,status,started_at,operation_type",
+      "id,order_no,item_no,target_qty,status,started_at,operation_type",
     );
     if (!taskQuery) return;
     const legacyPick = await taskQuery.maybeSingle();
@@ -74,7 +94,7 @@ async function syncPickingProgressAfterLedgerMove(
   const tr = taskRow as unknown as {
     id: string;
     order_no: string;
-    item_code?: string;
+    item_no?: string;
     target_qty?: number;
     status?: string;
     started_at?: string | null;
@@ -97,7 +117,7 @@ async function syncPickingProgressAfterLedgerMove(
       const logRow: Record<string, unknown> = {
         task_id: String(tr.id),
         order_no: String(tr.order_no),
-        item_no: String(tr.item_code ?? ""),
+        item_no: String(tr.item_no ?? ""),
         nfc_uid: scanPayload || `LEDGER:${new Date().toISOString()}`,
         actual_qty: qty,
         operator: operatorName || null,
@@ -112,7 +132,7 @@ async function syncPickingProgressAfterLedgerMove(
     const prevPicked = Number(tr.picked_qty ?? 0);
     completedQty = Math.max(0, prevPicked + qty);
   } else {
-    let sumQ = admin
+    const sumQ = admin
       .from("picking_logs")
       .select("actual_qty")
       .eq("task_id", String(tr.id));
@@ -139,7 +159,7 @@ async function syncPickingProgressAfterLedgerMove(
   if (!tr.started_at && completedQty > 0) {
     taskPatch.started_at = nowIso;
   }
-  let taskUp = admin
+  const taskUp = admin
     .from("picking_tasks")
     .update(taskPatch)
     .eq("id", String(tr.id));
@@ -162,7 +182,7 @@ async function syncPickingProgressAfterLedgerMove(
     if (supportsPickedQty) {
       doneQty = Number((row as { picked_qty?: number | null }).picked_qty ?? 0);
     } else {
-      let q = admin
+      const q = admin
         .from("picking_logs")
         .select("actual_qty")
         .eq("task_id", String((row as unknown as { id: string }).id));
@@ -179,7 +199,7 @@ async function syncPickingProgressAfterLedgerMove(
     }
   }
   if (allDone) {
-    let doneQ = admin
+    const doneQ = admin
       .from("picking_tasks")
       .update({
         status: "completed",
@@ -190,8 +210,27 @@ async function syncPickingProgressAfterLedgerMove(
   }
 }
 
+async function insertWarehouseLedgerLine(
+  admin: SupabaseClient,
+  row: Record<string, unknown>,
+): Promise<void> {
+  const extended = { ...row };
+  let ins = await admin.from("warehouse_ledger_lines").insert(extended);
+  if (
+    ins.error &&
+    /column|does not exist|42703|schema cache/i.test(String(ins.error.message))
+  ) {
+    const legacy = stripExtendedWarehouseLedgerLineCols(extended);
+    ins = await admin.from("warehouse_ledger_lines").insert(legacy);
+  }
+  if (ins.error) {
+    throw new Error(ins.error.message);
+  }
+}
+
 /**
  * 套用入／出庫量至 warehouse_ledger_stock 並寫入 warehouse_ledger_lines。
+ * 若已建立 warehouse_ledger_bin_stock，則以儲位加總回寫總量。
  * 出庫且尚無主檔：不異動庫存（ref.no_master_row），仍寫異動列供稽核。
  */
 export async function applyWarehouseLedgerMove(
@@ -203,6 +242,18 @@ export async function applyWarehouseLedgerMove(
   if (!Number.isFinite(qty) || qty <= 0) {
     return { ok: false, error: "invalid_qty" };
   }
+
+  const useBins = await binStockTableReady(admin);
+  const fromBin = normLedgerBinCode(
+    scopedParams.fromBin ?? (scopedParams.direction === "outbound" ? LEDGER_DEFAULT_BIN : ""),
+  );
+  const toBin = normLedgerBinCode(
+    scopedParams.toBin ?? (scopedParams.direction === "inbound" ? LEDGER_DEFAULT_BIN : ""),
+  );
+  const opName = refText(scopedParams.ref, "operator_name").slice(0, 120);
+  const effectiveTx =
+    scopedParams.ledgerLineTxType ??
+    (scopedParams.direction === "inbound" ? "inbound" : "outbound");
 
   const primaryPick = await admin
     .from("warehouse_ledger_stock")
@@ -219,30 +270,121 @@ export async function applyWarehouseLedgerMove(
       .select("id,on_hand")
       .eq("item_no", scopedParams.itemNo)
       .maybeSingle();
-    row = legacyPick.data as
-      | { id: string; stock_quantity?: number | null; on_hand?: number | null }
-      | null;
+    row = legacyPick.data as typeof row;
     selErr = legacyPick.error;
   }
 
   if (selErr) {
-    return { ok: false, error: selErr.message };
+    const em = selErr.message ?? "";
+    return { ok: false, error: em };
   }
 
   const signed = p.direction === "inbound" ? qty : -qty;
 
-  const writeLine = async (balanceAfter: number, extraRef: LedgerMoveRef) => {
+  const writeLine = async (
+    balanceAfter: number,
+    extraRef: LedgerMoveRef,
+    binMeta?: {
+      from_bin: string | null;
+      to_bin: string | null;
+      bin_balance_after: number | null;
+    },
+  ) => {
     const outboundShort =
-      p.direction === "outbound" && Number.isFinite(balanceAfter) && balanceAfter < 0;
-    await admin.from("warehouse_ledger_lines").insert({
+      p.direction === "outbound" &&
+      Number.isFinite(balanceAfter) &&
+      balanceAfter < 0;
+    const baseRow: Record<string, unknown> = {
       item_no: scopedParams.itemNo,
       direction: scopedParams.direction,
       qty_delta: qty,
       balance_after: balanceAfter,
       shortage_forced: outboundShort && Boolean(scopedParams.shortageForced),
       ref: { ...scopedParams.ref, ...extraRef },
-    });
+      tx_type: effectiveTx,
+      operator_name: opName || null,
+      from_bin: binMeta?.from_bin ?? null,
+      to_bin: binMeta?.to_bin ?? null,
+      bin_balance_after: binMeta?.bin_balance_after ?? null,
+    };
+    await insertWarehouseLedgerLine(admin, baseRow);
   };
+
+  if (useBins) {
+    if (!row && scopedParams.direction === "outbound") {
+      await writeLine(
+        0,
+        {
+          no_master_row: true,
+          note: "總帳尚無此料號主檔，未扣帳（請先匯入總帳或補建主檔）。",
+        },
+        {
+          from_bin: fromBin,
+          to_bin: null,
+          bin_balance_after: null,
+        },
+      );
+      return { ok: true, balance_after: 0 };
+    }
+
+    if (!row && scopedParams.direction === "inbound") {
+      const seedName = (scopedParams.seedItemName ?? "").trim().slice(0, 500);
+      const seedSpec = (scopedParams.seedSpec ?? "").trim().slice(0, 500);
+      const baseInsert = {
+        item_no: scopedParams.itemNo,
+        item_name: seedName,
+        spec: seedSpec,
+        updated_at: new Date().toISOString(),
+      };
+      const ins0 = await admin
+        .from("warehouse_ledger_stock")
+        .insert({ ...baseInsert, stock_quantity: 0 });
+      if (ins0.error) {
+        if (
+          /column .*stock_quantity.* does not exist/i.test(ins0.error.message)
+        ) {
+          const fb = await admin
+            .from("warehouse_ledger_stock")
+            .insert({ ...baseInsert, on_hand: 0 });
+          if (fb.error) {
+            return { ok: false, error: fb.error.message };
+          }
+        } else {
+          return { ok: false, error: ins0.error.message };
+        }
+      }
+    }
+
+    const targetBin =
+      scopedParams.direction === "inbound" ? toBin : fromBin;
+    const delta = scopedParams.direction === "inbound" ? qty : -qty;
+    const bd = await applyBinDelta(
+      admin,
+      scopedParams.itemNo,
+      targetBin,
+      delta,
+    );
+    if (!bd.ok) {
+      return { ok: false, error: bd.error };
+    }
+    const rec = await reconcileLedgerTotalFromBins(admin, scopedParams.itemNo);
+    if (!rec.ok) {
+      return { ok: false, error: rec.error };
+    }
+    const fromB = scopedParams.direction === "outbound" ? fromBin : null;
+    const toB = scopedParams.direction === "inbound" ? toBin : null;
+    await writeLine(
+      rec.total,
+      row ? {} : { auto_created_stock_row: true },
+      {
+        from_bin: fromB,
+        to_bin: toB,
+        bin_balance_after: bd.qty_after,
+      },
+    );
+    await syncPickingProgressAfterLedgerMove(admin, scopedParams, qty);
+    return { ok: true, balance_after: rec.total };
+  }
 
   if (!row) {
     if (scopedParams.direction === "outbound") {
@@ -261,7 +403,6 @@ export async function applyWarehouseLedgerMove(
       spec: seedSpec,
       updated_at: new Date().toISOString(),
     };
-    // 以新欄位 stock_quantity 為主；舊庫欄位則回退 on_hand。
     const insPrimary = await admin
       .from("warehouse_ledger_stock")
       .insert({ ...baseInsert, stock_quantity: qty });
@@ -274,8 +415,14 @@ export async function applyWarehouseLedgerMove(
               .from("warehouse_ledger_stock")
               .insert({ ...baseInsert, on_hand: qty })
           : null;
-      if (fallback?.error) return { ok: false, error: fallback.error.message };
-      if (!fallback) return { ok: false, error: insPrimary.error.message };
+      if (fallback?.error) {
+        const em = fallback.error.message ?? "";
+        return { ok: false, error: em };
+      }
+      if (!fallback) {
+        const em = insPrimary.error.message ?? "";
+        return { ok: false, error: em };
+      }
     }
     await writeLine(qty, { auto_created_stock_row: true });
     await syncPickingProgressAfterLedgerMove(admin, scopedParams, qty);
@@ -311,10 +458,12 @@ export async function applyWarehouseLedgerMove(
         })
         .eq("id", row.id);
       if (fallbackUp.error) {
-        return { ok: false, error: fallbackUp.error.message };
+        const em = fallbackUp.error.message ?? "";
+        return { ok: false, error: em };
       }
     } else {
-      return { ok: false, error: primaryUp.error.message };
+      const em = primaryUp.error.message ?? "";
+      return { ok: false, error: em };
     }
   }
 

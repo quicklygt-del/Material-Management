@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getSessionUser } from "@/lib/auth";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 /** 僅倉儲主管（warehouse_admin）可進入，例如標籤中心、QR 中心。 */
 export function SupervisorOnlyGate({
@@ -17,7 +17,7 @@ export function SupervisorOnlyGate({
   useEffect(() => {
     const u = getSessionUser();
     if (!u || u.role !== "warehouse_admin") {
-      router.replace(withTenantParam("/"));
+      router.replace(appHref("/"));
       return;
     }
     setAllowed(true);

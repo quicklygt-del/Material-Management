@@ -1,18 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 import { signUnitJwt, UNIT_JWT_COOKIE } from "@/lib/unitPortalJwt";
-import {
-  getStorageZonesScopeColumn,
-  zoneRowScopeValue,
-} from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +28,9 @@ export async function POST(req: Request) {
   }
 
   const nowIso = new Date().toISOString();
-  const szCol = getStorageZonesScopeColumn();
   const { data: zones, error } = await admin
     .from("storage_zones")
-    .select(`id,name,slug,${szCol},invite_token,invite_expires_at`)
+    .select("id,name,slug,invite_token,invite_expires_at")
     .eq("invite_token", raw);
 
   if (error) {
@@ -58,11 +49,6 @@ export async function POST(req: Request) {
     String(row.id),
     {
       slug: String(row.slug),
-      tenant: normalizeLabelPrefix(
-        zoneRowScopeValue(
-          row as { ?: unknown; company_id?: unknown },
-        ) || getDefaultLabelPrefix(),
-      ),
       name: String(row.name ?? "").trim() || "單位",
     },
     COOKIE_MAX_AGE_SEC,

@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { parseLabelQrPayload } from "@/lib/labelEncoding";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 type LookupRecord = {
   id?: string;
@@ -26,7 +26,6 @@ type UnitCtx = {
   unit_id: string;
   slug: string;
   name: string;
-  : string;
   portal_login: string;
 };
 
@@ -181,7 +180,6 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
         unit_id: String(j.unit_id ?? ""),
         slug: canonSlug,
         name: String(j.name ?? ""),
-        : String(j. ?? ""),
         portal_login: String(j.portal_login ?? "").trim(),
       });
       if (canonSlug && canonSlug !== slug) {
@@ -198,7 +196,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
       method: "POST",
       credentials: "include",
     });
-    router.replace(withTenantParam("/"));
+    router.replace(appHref("/"));
   };
 
   const fireSuccessToast = useCallback((line: string) => {
@@ -241,7 +239,6 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            : ctx.,
             unit_id: ctx.unit_id,
             label_record_id: rec.id,
             qr_payload: rec.qr_payload,
@@ -277,7 +274,6 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
       setBusyLook(true);
       try {
         const u = new URL("/api/label-records/lookup", window.location.origin);
-        u.searchParams.set("tenant", ctx.);
         u.searchParams.set("qr", raw);
         const res = await fetch(u.toString());
         const json = (await res.json()) as {
@@ -391,7 +387,7 @@ export function UnitDedicatedWorkspace({ slug }: { slug: string }) {
         {ctxErr}
         <button
           type="button"
-          onClick={() => router.replace(withTenantParam("/other-operations"))}
+          onClick={() => router.replace(appHref("/other-operations"))}
           className="mx-auto mt-6 block rounded-xl bg-slate-900 px-6 py-3 text-white"
         >
           重新登入

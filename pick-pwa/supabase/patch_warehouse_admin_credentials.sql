@@ -17,7 +17,7 @@ alter table public.app_users
   check (role in ('warehouse_admin', 'system_admin', 'warehouse_staff'));
 
 insert into public.app_users (username, password, role, company_id)
-values ('warehouse_admin', 'wa12345', 'warehouse_admin', 'CARB')
+values ('warehouse_admin', 'wa12345', 'warehouse_admin', '')
 on conflict (username) do update
 set
   password = excluded.password,

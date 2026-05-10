@@ -9,11 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useQrCenterTenant } from "@/lib/qrCenterTenant";
-import {
-  getDefaultLabelPrefix,
-  parseLabelQrPayload,
-} from "@/lib/labelEncoding";
+import { parseLabelQrPayload } from "@/lib/labelEncoding";
 
 const TAB_KEY = "wms-warehouse-tab-v1";
 const AXIS_KEY = "field-axis-v1";
@@ -155,11 +151,6 @@ function isUniversalLabelType(t: string): boolean {
 export function OtherOperationArea() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { tenantId } = useQrCenterTenant();
-  const companyId = useMemo(
-    () => tenantId || getDefaultLabelPrefix(),
-    [tenantId],
-  );
 
   const [activeTab, setActiveTab] = useState<"material" | "unit">("material");
 
@@ -362,7 +353,6 @@ export function OtherOperationArea() {
     setZBusy(true);
     try {
       const u = new URL("/api/warehouses", window.location.origin);
-      if (companyId) u.searchParams.set("tenant", companyId);
       const res = await fetch(u.toString());
       const json = (await res.json()) as {
         storage_zones?: Zone[];
@@ -374,7 +364,7 @@ export function OtherOperationArea() {
     } finally {
       setZBusy(false);
     }
-  }, [companyId]);
+  }, []);
 
   useEffect(() => {
     void loadZones();
@@ -413,11 +403,10 @@ export function OtherOperationArea() {
   }, [tabId]);
 
   const loadLedgerLines = useCallback(async () => {
-    if (!companyId || !tabId || activeTab !== "unit") return;
+    if (!tabId || activeTab !== "unit") return;
     setLinesBusy(true);
     try {
       const u = new URL("/api/universal-ledger/lines", window.location.origin);
-      u.searchParams.set("tenant", companyId);
       u.searchParams.set("unit_id", tabId);
       const res = await fetch(u.toString());
       const json = (await res.json()) as {
@@ -431,7 +420,7 @@ export function OtherOperationArea() {
     } finally {
       setLinesBusy(false);
     }
-  }, [activeTab, companyId, tabId]);
+  }, [activeTab, tabId]);
 
   useEffect(() => {
     void loadLedgerLines();
@@ -439,14 +428,13 @@ export function OtherOperationArea() {
 
   const fetchMatBalance = useCallback(
     async (materialItemNo: string) => {
-      if (!materialItemNo || !companyId) {
+      if (!materialItemNo) {
         setBalance(null);
         return;
       }
       setBalBusy(true);
       try {
         const u = new URL("/api/material/balance", window.location.origin);
-        u.searchParams.set("tenant", companyId);
         u.searchParams.set("material_item_no", materialItemNo);
         const res = await fetch(u.toString());
         const json = (await res.json()) as { on_hand?: number; error?: string };
@@ -458,12 +446,12 @@ export function OtherOperationArea() {
         setBalBusy(false);
       }
     },
-    [companyId],
+    [],
   );
 
   const fetchUniBalance = useCallback(
     async (labelRecordId: string, unitId: string) => {
-      if (!labelRecordId || !unitId || !companyId) {
+      if (!labelRecordId || !unitId) {
         setBalance(null);
         return;
       }
@@ -473,7 +461,6 @@ export function OtherOperationArea() {
           "/api/universal-ledger/balance",
           window.location.origin,
         );
-        u.searchParams.set("tenant", companyId);
         u.searchParams.set("unit_id", unitId);
         u.searchParams.set("label_record_id", labelRecordId);
         const res = await fetch(u.toString());
@@ -486,7 +473,7 @@ export function OtherOperationArea() {
         setBalBusy(false);
       }
     },
-    [companyId],
+    [],
   );
 
   useEffect(() => {
@@ -518,14 +505,13 @@ export function OtherOperationArea() {
 
   const runSearch = useCallback(async () => {
     setSearchErr(null);
-    if (!normalizedQuery || !companyId) {
+    if (!normalizedQuery) {
       setHits([]);
       return;
     }
     setSearchBusy(true);
     try {
       const u = new URL("/api/materials/search", window.location.origin);
-      u.searchParams.set("tenant", companyId);
       u.searchParams.set("q", normalizedQuery);
       const res = await fetch(u.toString());
       const json = (await res.json()) as {
@@ -544,7 +530,7 @@ export function OtherOperationArea() {
     } finally {
       setSearchBusy(false);
     }
-  }, [companyId, normalizedQuery]);
+  }, [normalizedQuery]);
 
   useEffect(() => {
     void runSearch();
@@ -556,7 +542,7 @@ export function OtherOperationArea() {
       kind: "inbound" | "pick" | "stocktake",
     ): Promise<boolean> => {
       setInvEcho(null);
-      if (!companyId || !isMaterialLedgerType(rec.label_type)) return false;
+      if (!isMaterialLedgerType(rec.label_type)) return false;
       const material_item_no = materialKeyForRecord(rec);
       if (!material_item_no) return false;
       if (kind !== "stocktake") {
@@ -578,7 +564,6 @@ export function OtherOperationArea() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            : companyId,
             material_item_no,
             label_record_id: rec.id ?? "",
             operator_name: "現場",
@@ -598,7 +583,6 @@ export function OtherOperationArea() {
       }
     },
     [
-      companyId,
       fetchMatBalance,
       materialKeyForRecord,
       produceOnHand,
@@ -609,7 +593,7 @@ export function OtherOperationArea() {
   const postUniversalLedgerTx = useCallback(
     async (rec: LookupRecord, kind: UniTxKind): Promise<boolean> => {
       setInvEcho(null);
-      if (!companyId || !rec.id || !tabId) return false;
+      if (!rec.id || !tabId) return false;
       if (kind !== "stocktake") {
         if (!Number.isFinite(produceQty) || produceQty <= 0) {
           setInvEcho("數量無效");
@@ -638,7 +622,6 @@ export function OtherOperationArea() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            : companyId,
             unit_id: tabId,
             label_record_id: rec.id,
             qr_payload: rec.qr_payload,
@@ -661,7 +644,6 @@ export function OtherOperationArea() {
       }
     },
     [
-      companyId,
       fetchUniBalance,
       loadLedgerLines,
       produceOnHand,
@@ -711,7 +693,6 @@ export function OtherOperationArea() {
       setBusyLook(true);
       try {
         const u = new URL("/api/label-records/lookup", window.location.origin);
-        u.searchParams.set("tenant", companyId);
         u.searchParams.set("qr", raw);
         const res = await fetch(u.toString());
         const json = (await res.json()) as {
@@ -760,7 +741,6 @@ export function OtherOperationArea() {
     },
     [
       activeTab,
-      companyId,
       postMaterialLedgerTx,
       postUniversalLedgerTx,
       produceAction,
@@ -838,7 +818,7 @@ export function OtherOperationArea() {
 
   const produceLabel = useCallback(async () => {
     const itemNo = itemNoToProduce.trim();
-    if (!companyId || !itemNo || produceBusy) return;
+    if (!itemNo || produceBusy) return;
     setProduceBusy(true);
     try {
       const metaFrom =
@@ -852,7 +832,6 @@ export function OtherOperationArea() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          : companyId,
           label_type: "S",
           qr_payload: itemNo,
           item_no: itemNo,
@@ -876,11 +855,11 @@ export function OtherOperationArea() {
     } finally {
       setProduceBusy(false);
     }
-  }, [companyId, effectiveRow, itemNoToProduce, produceBusy]);
+  }, [effectiveRow, itemNoToProduce, produceBusy]);
 
   const produceUniversal = useCallback(async () => {
     const note = contentDesc.trim().slice(0, QR_MAX);
-    if (!companyId || !note || !tabId || produceUniBusy) return;
+    if (!note || !tabId || produceUniBusy) return;
     if (produceAction !== "stocktake") {
       if (!Number.isFinite(produceQty) || produceQty <= 0) {
         setErrLook("移入／移出請填正整數數量");
@@ -898,7 +877,6 @@ export function OtherOperationArea() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          : companyId,
           label_type: "UNIVERSAL",
           qr_payload: note,
           item_no: note,
@@ -923,7 +901,6 @@ export function OtherOperationArea() {
       setProduceUniBusy(false);
     }
   }, [
-    companyId,
     contentDesc,
     loadLedgerLines,
     produceAction,
@@ -934,11 +911,10 @@ export function OtherOperationArea() {
   ]);
 
   const downloadBinCard = useCallback(async () => {
-    if (!companyId || !tabId || exportBusy) return;
+    if (!tabId || exportBusy) return;
     setExportBusy(true);
     try {
       const u = new URL("/api/universal-ledger/export", window.location.origin);
-      u.searchParams.set("tenant", companyId);
       u.searchParams.set("unit_id", tabId);
       u.searchParams.set("format", "xlsx");
       const res = await fetch(u.toString());
@@ -961,17 +937,17 @@ export function OtherOperationArea() {
     } finally {
       setExportBusy(false);
     }
-  }, [companyId, exportBusy, tabId]);
+  }, [exportBusy, tabId]);
 
   const handleAddUnit = useCallback(async () => {
     const n = newUnitName.trim();
-    if (!n || !companyId || addBusy || zones.length >= 5) return;
+    if (!n || addBusy || zones.length >= 5) return;
     setAddBusy(true);
     try {
       const res = await fetch("/api/warehouses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: n, : companyId }),
+        body: JSON.stringify({ name: n }),
       });
       const json = (await res.json()) as { warehouse?: { id: string } };
       if (!res.ok) return;
@@ -990,11 +966,11 @@ export function OtherOperationArea() {
     } finally {
       setAddBusy(false);
     }
-  }, [addBusy, companyId, loadZones, newUnitName, zones.length]);
+  }, [addBusy, loadZones, newUnitName, zones.length]);
 
   const deleteZone = useCallback(
     async (id: string, name: string) => {
-      if (!companyId || !adminMode) return;
+      if (!adminMode) return;
       if (
         typeof window !== "undefined" &&
         !window.confirm(`確定刪除管理單位「${name}」？`)
@@ -1004,7 +980,6 @@ export function OtherOperationArea() {
       try {
         const u = new URL("/api/warehouses", window.location.origin);
         u.searchParams.set("id", id);
-        u.searchParams.set("tenant", companyId);
         const res = await fetch(u.toString(), { method: "DELETE" });
         const json = (await res.json()) as { error?: string };
         if (!res.ok) throw new Error(json.error ?? "刪除失敗");
@@ -1014,7 +989,7 @@ export function OtherOperationArea() {
         setErrLook(e instanceof Error ? e.message : "刪除失敗");
       }
     },
-    [adminMode, companyId, loadZones, tabId],
+    [adminMode, loadZones, tabId],
   );
 
   const pickUnitTab = useCallback((id: string) => {

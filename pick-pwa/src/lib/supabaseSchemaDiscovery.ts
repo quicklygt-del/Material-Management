@@ -115,13 +115,11 @@ export function pickNumericQtyColumn(cols: Set<string>): string | null {
 }
 
 export function pickItemMatchColumns(cols: Set<string>): string[] {
-  const keys = ["item_code", "item_no"].filter((k) => cols.has(k));
+  const keys = ["item_no", "item_no"].filter((k) => cols.has(k));
   return keys.length > 0 ? keys : [];
 }
 
-export function pickScopeColumns(cols: Set<string>): ("" | "company_id")[] {
-  const out: ("" | "company_id")[] = [];
-  if (cols.has("")) out.push("");
-  if (cols.has("company_id")) out.push("company_id");
-  return out;
+/** 單機模式：不使用資料範圍欄位。 */
+export function pickScopeColumns(): string[] {
+  return [];
 }

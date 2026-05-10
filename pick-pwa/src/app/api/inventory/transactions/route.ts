@@ -10,7 +10,7 @@ export async function GET() {
   const admin = getSupabaseServiceRoleClient();
   if (!admin) return missingServiceRoleResponse();
 
-  let primary = await admin
+  const primary = await admin
     .from("inventory_transactions")
     .select(
       "id,created_at,operator_name,order_no,item_no,action_type,quantity_delta",

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { exitToLoginHome, loginByPassword } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -54,7 +54,7 @@ export default function AdminLoginPage() {
                   setMsg(result.message);
                   return;
                 }
-                router.replace(withTenantParam("/admin/other-operations"));
+                router.replace(appHref("/admin/other-operations"));
               })();
             }}
           >

@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   normLedgerItemNo,
   type WarehouseLedgerDirection,
 } from "@/lib/warehouseLedger";
@@ -28,7 +25,6 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const tenantId = normalizeLabelPrefix(String(b. ?? "")) || "CARB";
   const itemNo = normLedgerItemNo(b.item_no);
   const direction = String(b.direction ?? "").trim() as WarehouseLedgerDirection;
   const qty = Number(b.qty);
@@ -44,6 +40,21 @@ export async function POST(req: Request) {
     operator_name: b.operator_name != null ? String(b.operator_name).trim() : undefined,
     scan_payload: b.scan_payload != null ? String(b.scan_payload).trim().slice(0, 240) : undefined,
   };
+
+  const txTypeRaw = String(b.tx_type ?? "").trim();
+  const ledgerLineTxType =
+    txTypeRaw === "special_issue" ? ("special_issue" as const) : undefined;
+  if (ledgerLineTxType && direction !== "outbound") {
+    return NextResponse.json(
+      { error: "特殊領用僅能搭配 outbound" },
+      { status: 400 },
+    );
+  }
+
+  const fromBin =
+    b.from_bin != null ? String(b.from_bin).trim().slice(0, 64) : undefined;
+  const toBin =
+    b.to_bin != null ? String(b.to_bin).trim().slice(0, 64) : undefined;
 
   if (!itemNo || (direction !== "inbound" && direction !== "outbound")) {
     return NextResponse.json(
@@ -61,7 +72,6 @@ export async function POST(req: Request) {
   };
 
   const r = await applyWarehouseLedgerMove(admin, {
-    tenantId,
     itemNo,
     direction,
     qty,
@@ -70,6 +80,9 @@ export async function POST(req: Request) {
     seedItemName:
       typeof b.seed_item_name === "string" ? b.seed_item_name : undefined,
     seedSpec: typeof b.seed_spec === "string" ? b.seed_spec : undefined,
+    fromBin: fromBin ?? null,
+    toBin: toBin ?? null,
+    ledgerLineTxType,
   });
 
   if (!r.ok) {

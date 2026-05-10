@@ -12,7 +12,7 @@ alter table public.universal_ledger_records
 comment on column public.universal_ledger_records.summary is '物料卡摘要（通常為標籤內容說明）';
 comment on column public.universal_ledger_records.balance_after is '本筆異動後該標籤於此單位之結餘';
 
--- 既有資料：依時間重算累計結餘（同一 tenant + unit + 標籤）
+-- 既有資料：依時間重算累計結餘（同一  + unit + 標籤）
 update public.universal_ledger_records AS u
 SET balance_after = s.bal::integer
 FROM (

@@ -75,7 +75,7 @@ create table if not exists public.warehouse_operators (
 );
 alter table public.warehouse_operators add column if not exists active boolean not null default true;
 alter table public.warehouse_operators add column if not exists password text not null default '';
-alter table public.warehouse_operators add column if not exists company_id text not null default 'CARB';
+alter table public.warehouse_operators add column if not exists company_id text not null default '';
 alter table public.warehouse_operators enable row level security;
 
 drop policy if exists picking_tasks_all on public.picking_tasks;

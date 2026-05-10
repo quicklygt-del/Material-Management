@@ -5,14 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import { AppBrandHeader } from "@/components/AppBrandHeader";
 import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
 import { canAccessWarehouseDashboard, getSessionUser } from "@/lib/auth";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 import { APP_VERSION } from "@/lib/version";
 
 const MAX_W = 5;
 
 type WarehouseRow = {
   id: string;
-  : string;
   name: string;
   created_at: string;
 };
@@ -148,7 +147,7 @@ export default function AdminWarehousesPage() {
           <AppBrandHeader section="資產分頁設定" align="left" />
           <p className="mt-2 text-xs font-black text-blue-700">版本：{APP_VERSION}</p>
         </div>
-        <Link href={withTenantParam("/admin")} className="font-bold underline">
+        <Link href={appHref("/admin")} className="font-bold underline">
           回管理後台
         </Link>
       </header>

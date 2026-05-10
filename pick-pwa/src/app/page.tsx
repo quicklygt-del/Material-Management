@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_BRAND_TAGLINE } from "@/components/AppBrandHeader";
@@ -11,10 +10,6 @@ import {
   postLoginRedirectPath,
   type SessionUser,
 } from "@/lib/auth";
-import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { APP_VERSION } from "@/lib/version";
 
@@ -35,44 +30,31 @@ function sortUsernames(usernames: string[]): string[] {
   return u;
 }
 
-/**
- * 當 API 無法使用時的客戶端備援方案
- * 統一使用 'company_id' 作為所有表格的過濾欄位
- */
-async function loadUsernamesClientFallback(
-  portalTenant: string,
-): Promise<string[]> {
+/** 當 API 無法使用時的客戶端備援方案 */
+async function loadUsernamesClientFallback(): Promise<string[]> {
   const supabase = getSupabaseBrowserClient();
-  const tenant =
-    normalizeLabelPrefix(portalTenant) || getDefaultLabelPrefix();
   const seen = new Set<string>();
 
-  // 1. 抓取系統帳號 (app_users) - 已移除角色限制
   const { data: appRows } = await supabase
     .from("app_users")
-    .select("username")
-    .eq("company_id", tenant);
+    .select("username");
   for (const row of appRows ?? []) {
     const x = String(row.username ?? "").trim();
     if (x) seen.add(x);
   }
 
-  // 2. 抓取作業員 (warehouse_operators)
   const { data: opRows } = await supabase
     .from("warehouse_operators")
     .select("name")
-    .eq("active", true)
-    .eq("company_id", tenant);
+    .eq("active", true);
   for (const row of opRows ?? []) {
     const x = String(row.name ?? "").trim();
     if (x) seen.add(x);
   }
 
-  // 3. 抓取儲位區域登入帳號 (storage_zones)
   const { data: zoneRows } = await supabase
     .from("storage_zones")
-    .select("portal_login")
-    .eq("company_id", tenant);
+    .select("portal_login");
   for (const row of zoneRows ?? []) {
     const x = String(row.portal_login ?? "").trim();
     if (x) seen.add(x);
@@ -92,17 +74,7 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [usernames, setUsernames] = useState<string[]>([]);
   const [identitiesLoading, setIdentitiesLoading] = useState(true);
-  const [portalTenant, setPortalTenant] = useState(() =>
-    getDefaultLabelPrefix(),
-  );
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-
-  useEffect(() => {
-    const q = normalizeLabelPrefix(
-      new URLSearchParams(window.location.search).get("tenant") || "",
-    );
-    setPortalTenant(q || getDefaultLabelPrefix());
-  }, []);
 
   const effectiveUsername =
     accountPick === MANUAL_SENTINEL
@@ -115,6 +87,16 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search).get("prefill");
+    const v = p?.trim();
+    if (v) {
+      setAccountPick(MANUAL_SENTINEL);
+      setManualAccount(v);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
     void (async () => {
@@ -122,11 +104,7 @@ export default function HomePage() {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       try {
         // 優先嘗試後端 API
-        const res = await fetch(
-          `${origin}/api/auth/management-login-identities?tenant=${encodeURIComponent(
-            portalTenant,
-          )}`,
-        );
+        const res = await fetch(`${origin}/api/auth/management-login-identities`);
         const j = (await res.json().catch(() => ({}))) as {
           usernames?: string[];
           error?: string;
@@ -141,7 +119,7 @@ export default function HomePage() {
       }
 
       // 如果 API 失敗，執行 fallback 邏輯
-      const fallback = await loadUsernamesClientFallback(portalTenant);
+      const fallback = await loadUsernamesClientFallback();
       if (!cancelled) {
         setUsernames(fallback);
         setIdentitiesLoading(false);
@@ -150,7 +128,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, portalTenant]);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated || !session) return;
@@ -168,7 +146,6 @@ export default function HomePage() {
       supabase,
       effectiveUsername,
       password,
-      portalTenant,
     );
     setBusy(false);
     if (!result.ok) {
@@ -182,7 +159,7 @@ export default function HomePage() {
     if ("user" in result) {
       setSession(result.user);
     }
-  }, [effectiveUsername, password, router, supabase, portalTenant]);
+  }, [effectiveUsername, password, router, supabase]);
 
   const logout = useCallback(() => {
     clearSessionUser();

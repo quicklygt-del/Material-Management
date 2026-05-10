@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 type TaskRow = {
   id: string;
   order_no: string;
-  item_code: string;
+  item_no: string;
   item_name: string | null;
   spec: string | null;
   unit: string | null;
@@ -27,7 +27,7 @@ export async function GET() {
   const { data, error } = await admin
     .from("picking_tasks")
     .select(
-      "id,order_no,item_code,item_name,spec,unit,target_qty,operation_type,status,assigned_operator,created_at",
+      "id,order_no,item_no,item_name,spec,unit,target_qty,operation_type,status,assigned_operator,created_at",
     )
     .in("status", ["pending", "in_progress", "completed"])
     .order("created_at", { ascending: false })
@@ -84,7 +84,7 @@ export async function GET() {
     };
 
     hit.items.push({
-      partNo: String(r.item_code ?? "").trim(),
+      partNo: String(r.item_no ?? "").trim(),
       qty: Number(r.target_qty ?? 0),
       itemName: String(r.item_name ?? "").trim() || undefined,
       spec: String(r.spec ?? "").trim() || undefined,

@@ -11,7 +11,7 @@ create table if not exists public.label_records (
   meta jsonb not null default '{}'::jsonb
 );
 
-create index if not exists idx_label_records_tenant_created
+create index if not exists idx_label_records__created
   on public.label_records (, created_at desc);
 
 alter table public.label_records enable row level security;

@@ -9,7 +9,7 @@ create table if not exists public.storage_zones (
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_storage_zones_tenant on public.storage_zones ();
+create index if not exists idx_storage_zones_ on public.storage_zones ();
 
 comment on table public.storage_zones is '虛擬倉／管理區；每租戶最多 5 筆（由應用程式限制）';
 
@@ -35,7 +35,7 @@ create table if not exists public.inventory_logs (
   meta jsonb not null default '{}'::jsonb
 );
 
-create index if not exists idx_inventory_logs_tenant_created
+create index if not exists idx_inventory_logs__created
   on public.inventory_logs (, created_at desc);
 create index if not exists idx_inventory_logs_label
   on public.inventory_logs (label_record_id);

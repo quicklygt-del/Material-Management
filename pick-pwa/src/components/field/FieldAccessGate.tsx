@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { getSessionUser } from "@/lib/auth";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 /**
  * /field 僅作舊網址相容導流（倉管員改為 /operator）：
@@ -25,25 +25,25 @@ export function FieldAccessGate() {
       if (!cancelled && r.ok) {
         const j = (await r.json()) as { slug?: string };
         if (j.slug) {
-          router.replace(withTenantParam(`/unit/${encodeURIComponent(j.slug)}`));
+          router.replace(appHref(`/unit/${encodeURIComponent(j.slug)}`));
           return;
         }
       }
 
       const s = getSessionUser();
       if (!cancelled && s?.role === "system_admin") {
-        router.replace(withTenantParam("/admin/other-operations"));
+        router.replace(appHref("/admin/other-operations"));
         return;
       }
       if (!cancelled && s?.role === "warehouse_admin") {
-        router.replace(withTenantParam("/admin"));
+        router.replace(appHref("/admin"));
         return;
       }
       if (!cancelled && s?.role === "warehouse_staff") {
-        router.replace(withTenantParam("/operator"));
+        router.replace(appHref("/operator"));
         return;
       }
-      if (!cancelled) router.replace(withTenantParam("/"));
+      if (!cancelled) router.replace(appHref("/"));
     })();
     return () => {
       cancelled = true;

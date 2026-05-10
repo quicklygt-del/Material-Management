@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 import { getPreviousLabelBalance } from "@/lib/universalLedgerBalance";
-import {
-  storageZonesSelectIdScope,
-  zoneRowScopeValue,
-} from "@/lib/storageZonesScope";
+import { storageZonesSelectIdScope } from "@/lib/storageZonesScope";
 
 function ledgerActionSummaryPrefix(action: string): string {
   switch (action) {
@@ -40,9 +33,6 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const  = normalizeLabelPrefix(
-    String(b. ?? getDefaultLabelPrefix()),
-  );
   const label_type = String(b.label_type ?? "");
   const qr_payload = String(b.qr_payload ?? "");
   const item_no_raw = String(b.item_no ?? "").trim();
@@ -58,7 +48,7 @@ export async function POST(req: Request) {
       : {};
 
   const allowedTypes = ["S", "R", "B", "Q", "D", "UNIVERSAL"] as const;
-  if (! || !allowedTypes.includes(label_type as (typeof allowedTypes)[number])) {
+  if (!allowedTypes.includes(label_type as (typeof allowedTypes)[number])) {
     return NextResponse.json({ error: "標籤類型無效" }, { status: 400 });
   }
   if (!qr_payload) {
@@ -68,7 +58,6 @@ export async function POST(req: Request) {
   const { data: inserted, error: insErr } = await admin
     .from("label_records")
     .insert({
-      ,
       label_type,
       qr_payload,
       item_no,
@@ -98,14 +87,7 @@ export async function POST(req: Request) {
       .select(storageZonesSelectIdScope())
       .eq("id", unitFromMeta)
       .maybeSingle();
-    if (
-      zone &&
-      normalizeLabelPrefix(
-        zoneRowScopeValue(
-          zone as { ?: unknown; company_id?: unknown },
-        ),
-      ) === 
-    ) {
+    if (zone) {
       const ledger_action = String(
         meta.ledger_action ?? "inbound",
       ).trim();
@@ -140,7 +122,6 @@ export async function POST(req: Request) {
 
       const prevBal = await getPreviousLabelBalance(
         admin,
-        ,
         unitFromMeta,
         newId,
       );
@@ -152,16 +133,15 @@ export async function POST(req: Request) {
       else quantity_delta = Math.trunc(qtyNum) - prevBal;
 
       const balance_after = prevBal + quantity_delta;
-      const body = String(
+      const bodyText = String(
         meta.user_content ?? meta.description ?? qr_payload,
       ).trim();
       const prefix = ledgerActionSummaryPrefix(ledger_action);
-      const summaryText = `${prefix} ${body}`.trim().slice(0, 2000);
+      const summaryText = `${prefix} ${bodyText}`.trim().slice(0, 2000);
 
       const { error: ledErr } = await admin
         .from("universal_ledger_records")
         .insert({
-          ,
           unit_id: unitFromMeta,
           label_record_id: newId,
           qr_payload,

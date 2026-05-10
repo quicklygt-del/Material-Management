@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 type PlatRow = {
   id: string;
@@ -24,7 +24,7 @@ export default function SuperAdminLabelTemplatesPage() {
     const auth = await fetch("/api/super-admin/session");
     const j = (await auth.json()) as { authenticated?: boolean };
     if (!j.authenticated) {
-      router.replace(withTenantParam("/super-admin/login"));
+      router.replace(appHref("/super-admin/login"));
       return false;
     }
     const res = await fetch("/api/super-admin/platform-label-templates");
@@ -79,14 +79,14 @@ export default function SuperAdminLabelTemplatesPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-black text-white">標籤格式公版</h1>
         <Link
-          href={withTenantParam("/super-admin")}
+          href={appHref("/super-admin")}
           className="text-xs font-black text-amber-300 underline"
         >
           ← 總控
         </Link>
       </div>
       <p className="mt-2 text-xs text-slate-400">
-        全域 Excel 比對欄序列（JSON）；未來可讓「租戶後台／單位設定」複製並覆寫。
+        全域 Excel 比對欄序列（JSON）；未來可讓後台／單位設定複製並覆寫。
       </p>
 
       {msg ? (

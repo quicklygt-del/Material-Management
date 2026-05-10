@@ -44,7 +44,6 @@ function mapUiStatusToPicking(
 
 export async function deletePickingTasksForOrder(
   supabase: SupabaseClient,
-  _tenantSlug: string,
   orderNo: string,
 ): Promise<void> {
   const order = String(orderNo ?? "").trim();
@@ -60,7 +59,6 @@ export async function deletePickingTasksForOrder(
  */
 export async function syncCommandTowerTasksToSupabase(
   supabase: SupabaseClient,
-  _tenantSlug: string,
   tasks: CommandTowerTask[],
 ): Promise<void> {
   for (const task of tasks) {
@@ -72,7 +70,7 @@ export async function syncCommandTowerTasksToSupabase(
       String(task.status ?? "").trim() === "未派單" || !assigned;
 
     if (unassigned) {
-      await deletePickingTasksForOrder(supabase, "", orderNo);
+      await deletePickingTasksForOrder(supabase, orderNo);
       continue;
     }
 
@@ -97,7 +95,7 @@ export async function syncCommandTowerTasksToSupabase(
 
       const row: Record<string, unknown> = {
         order_no: orderNo,
-        item_code: itemCode,
+        item_no: itemCode,
         item_name: nm || "",
         spec: sp || "",
         unit: un || "",
@@ -111,7 +109,7 @@ export async function syncCommandTowerTasksToSupabase(
       rows.push(row);
     }
 
-    await deletePickingTasksForOrder(supabase, "", orderNo);
+    await deletePickingTasksForOrder(supabase, orderNo);
 
     if (rows.length === 0) continue;
 

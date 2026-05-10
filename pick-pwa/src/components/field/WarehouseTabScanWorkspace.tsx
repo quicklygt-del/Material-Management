@@ -9,9 +9,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { getDefaultLabelPrefix } from "@/lib/labelEncoding";
-import { withTenantParam } from "@/lib/tenantNav";
-import { useQrCenterTenant } from "@/lib/qrCenterTenant";
 
 const TAB_STORAGE_KEY = "wms-warehouse-tab-v1";
 
@@ -83,6 +80,7 @@ type Props = {
   variant?: "standalone" | "assetHub" | "assetHubCamera";
 };
 
+/** 與 /operator 相同：全螢幕黑底＋綠角框＋底部手動輸入。 */
 export function WarehouseTabScanWorkspace({
   cameraMode,
   variant = "standalone",
@@ -92,10 +90,21 @@ export function WarehouseTabScanWorkspace({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { tenantId } = useQrCenterTenant();
-  const companyId = useMemo(() => tenantId || getDefaultLabelPrefix(), [tenantId]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanningActiveRef = useRef(false);
+  const decodeRafRef = useRef<number | null>(null);
+  const busyMirrorRef = useRef(false);
+  const lastScanRef = useRef<{ code: string; at: number }>({
+    code: "",
+    at: 0,
+  });
+  const lastDetectAtRef = useRef(0);
+
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanManualInput, setScanManualInput] = useState("");
+
   const [qrInput, setQrInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -119,6 +128,25 @@ export function WarehouseTabScanWorkspace({
   const [newZoneName, setNewZoneName] = useState("");
   const [addZoneBusy, setAddZoneBusy] = useState(false);
 
+  useEffect(() => {
+    busyMirrorRef.current = busy;
+  }, [busy]);
+
+  const stopScanHardware = useCallback(() => {
+    scanningActiveRef.current = false;
+    if (decodeRafRef.current != null) {
+      cancelAnimationFrame(decodeRafRef.current);
+      decodeRafRef.current = null;
+    }
+    if (streamRef.current) {
+      for (const tr of streamRef.current.getTracks()) tr.stop();
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
   const currentSiteName = useMemo(() => {
     const w = warehouses.find((x) => x.id === tabWarehouseId);
     return w?.name ?? "";
@@ -128,7 +156,6 @@ export function WarehouseTabScanWorkspace({
     setWhListBusy(true);
     try {
       const u = new URL("/api/warehouses", window.location.origin);
-      if (companyId) u.searchParams.set("tenant", companyId);
       const res = await fetch(u.toString());
       const json = (await res.json()) as {
         storage_zones?: { id: string; name: string }[];
@@ -145,7 +172,7 @@ export function WarehouseTabScanWorkspace({
     } finally {
       setWhListBusy(false);
     }
-  }, [companyId]);
+  }, []);
 
   useEffect(() => {
     void loadZones();
@@ -198,13 +225,13 @@ export function WarehouseTabScanWorkspace({
 
   const addStorageZone = useCallback(async () => {
     const name = newZoneName.trim();
-    if (!name || addZoneBusy || !companyId) return;
+    if (!name || addZoneBusy) return;
     setAddZoneBusy(true);
     try {
       const res = await fetch("/api/warehouses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, : companyId }),
+        body: JSON.stringify({ name }),
       });
       const json = (await res.json()) as {
         warehouse?: { id: string };
@@ -220,7 +247,6 @@ export function WarehouseTabScanWorkspace({
     }
   }, [
     addZoneBusy,
-    companyId,
     loadZones,
     newZoneName,
     selectWarehouseTab,
@@ -264,13 +290,12 @@ export function WarehouseTabScanWorkspace({
       setFound(null);
       setOnHand(null);
       if (!qr) {
-        setErrorMsg(null);
+        setErrorMsg("請輸入或貼上 QR／料號");
         return;
       }
       setBusy(true);
       try {
         const u = new URL("/api/label-records/lookup", window.location.origin);
-        u.searchParams.set("tenant", companyId);
         u.searchParams.set("qr", qr);
         const res = await fetch(u.toString());
         const json = (await res.json()) as {
@@ -283,14 +308,115 @@ export function WarehouseTabScanWorkspace({
         }
         setFound(Boolean(json.found));
         if (json.record) setRecord(json.record as LookupRecord);
+        setQrInput(qr);
+        if (cameraMode) {
+          setScanOpen(false);
+          stopScanHardware();
+          setScanManualInput("");
+        }
       } catch (e) {
         setErrorMsg(e instanceof Error ? e.message : "查詢失敗");
       } finally {
         setBusy(false);
       }
     },
-    [companyId],
+    [cameraMode, stopScanHardware],
   );
+
+  const kickDecodeLoop = useCallback(() => {
+    const Detector =
+      typeof window !== "undefined" ? window.BarcodeDetector : undefined;
+    if (!Detector || !videoRef.current) return;
+    let det: BarcodeDetector;
+    try {
+      det = new Detector({ formats: ["qr_code"] });
+    } catch {
+      try {
+        det = new Detector({
+          formats: ["qr_code", "code_128", "code_39", "ean_13", "upc_a"],
+        });
+      } catch {
+        return;
+      }
+    }
+    const loop = async () => {
+      if (!videoRef.current || !scanningActiveRef.current) return;
+      if (busyMirrorRef.current) {
+        decodeRafRef.current = requestAnimationFrame(() => void loop());
+        return;
+      }
+      const v = videoRef.current;
+      if (v.videoWidth === 0 || v.videoHeight === 0) {
+        decodeRafRef.current = requestAnimationFrame(() => void loop());
+        return;
+      }
+      const t = performance.now();
+      if (t - lastDetectAtRef.current < 160) {
+        decodeRafRef.current = requestAnimationFrame(() => void loop());
+        return;
+      }
+      lastDetectAtRef.current = t;
+      try {
+        const found = await det.detect(videoRef.current);
+        const code = String(found?.[0]?.rawValue ?? "").trim();
+        if (code) {
+          const now = Date.now();
+          const prev = lastScanRef.current;
+          if (code === prev.code && now - prev.at < 1800) {
+            decodeRafRef.current = requestAnimationFrame(() => void loop());
+            return;
+          }
+          lastScanRef.current = { code, at: now };
+          await fetchRecord(code);
+          return;
+        }
+      } catch {
+        void 0;
+      }
+      decodeRafRef.current = requestAnimationFrame(() => void loop());
+    };
+    void loop();
+  }, [fetchRecord]);
+
+  const openFullscreenScan = useCallback(async () => {
+    if (busy) return;
+    setErrorMsg(null);
+    setScanManualInput("");
+    scanningActiveRef.current = true;
+    setScanOpen(true);
+    const Detector =
+      typeof window !== "undefined" ? window.BarcodeDetector : undefined;
+    if (!Detector) {
+      scanningActiveRef.current = false;
+      setErrorMsg("此瀏覽器不支援鏡頭解碼，請改用手動貼上。");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        await new Promise<void>((resolve) => {
+          const el = videoRef.current;
+          if (!el) {
+            resolve();
+            return;
+          }
+          if (el.readyState >= 2) resolve();
+          else el.addEventListener("loadeddata", () => resolve(), { once: true });
+        });
+      }
+      kickDecodeLoop();
+    } catch {
+      scanningActiveRef.current = false;
+      setScanOpen(false);
+      setErrorMsg("無法啟用相機，請檢查權限或改用手動貼上。");
+    }
+  }, [busy, kickDecodeLoop]);
 
   useEffect(() => {
     if (!record?.id || !tabWarehouseId) {
@@ -302,75 +428,12 @@ export function WarehouseTabScanWorkspace({
 
   useEffect(() => {
     const qr = searchParams.get("qr")?.trim();
-    if (!qr || !companyId) return;
-    const key = `${companyId}::${qr}`;
+    if (!qr) return;
+    const key = qr;
     if (autoFetchedKey.current === key) return;
     autoFetchedKey.current = key;
     void fetchRecord(qr);
-  }, [searchParams, companyId, fetchRecord]);
-
-  useEffect(() => {
-    if (!cameraMode) return;
-    if (typeof window === "undefined" || !window.BarcodeDetector) {
-      /* 無解碼 API 時不開鏡頭，改以手動貼上；不顯示表頭長提示 */
-      return;
-    }
-
-    let stream: MediaStream | null = null;
-    let raf = 0;
-    let stopped = false;
-    const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-
-    const tick = async () => {
-      if (stopped || !videoRef.current) return;
-      try {
-        const codes = await detector.detect(videoRef.current);
-        const raw = codes[0]?.rawValue?.trim();
-        if (raw) {
-          stopped = true;
-          stream?.getTracks().forEach((t) => t.stop());
-          setQrInput(raw);
-          void fetchRecord(raw);
-          return;
-        }
-      } catch {
-        void 0;
-      }
-      raf = requestAnimationFrame(() => void tick());
-    };
-
-    const start = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-      } catch {
-        return;
-      }
-      const v = videoRef.current;
-      if (!v) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      v.srcObject = stream;
-      try {
-        await v.play();
-      } catch {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      raf = requestAnimationFrame(() => void tick());
-    };
-
-    void start();
-
-    return () => {
-      stopped = true;
-      cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, [cameraMode, fetchRecord]);
+  }, [searchParams, fetchRecord]);
 
   const lookup = useCallback(() => {
     void fetchRecord(qrInput);
@@ -419,7 +482,7 @@ export function WarehouseTabScanWorkspace({
 
   const submitInventory = useCallback(
     async (action_type: "inbound" | "pick" | "stocktake") => {
-      if (!companyId || !record) return;
+      if (!record) return;
       setInvMsg(null);
       if (!tabWarehouseId) {
         setInvMsg("無分頁");
@@ -446,7 +509,6 @@ export function WarehouseTabScanWorkspace({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            : companyId,
             label_record_id: record.id ?? "",
             qr_payload: record.qr_payload,
             warehouse_id: tabWarehouseId,
@@ -471,7 +533,6 @@ export function WarehouseTabScanWorkspace({
       }
     },
     [
-      companyId,
       record,
       tabWarehouseId,
       operatorName,
@@ -490,7 +551,7 @@ export function WarehouseTabScanWorkspace({
         {!isAssetHub && (
           <div className="mb-3">
             <Link
-              href={withTenantParam("/")}
+              href="/"
               className="inline-flex h-10 w-10 items-center justify-center rounded-full text-xl text-zinc-700 hover:bg-zinc-200/80"
               aria-label="返回"
             >
@@ -559,35 +620,63 @@ export function WarehouseTabScanWorkspace({
           </div>
         ) : null}
 
-        {cameraMode && (
-          <div className="mt-4 overflow-hidden rounded-2xl border border-zinc-300 bg-zinc-900 shadow-inner">
-            <video
-              ref={videoRef}
-              className="aspect-video w-full object-cover"
-              playsInline
-              muted
-              aria-label="相機預覽"
-            />
+        {cameraMode ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void openFullscreenScan()}
+              className="flex h-28 w-full flex-col items-center justify-center rounded-2xl border-4 border-violet-800 bg-violet-600 text-white shadow-md disabled:opacity-50"
+            >
+              <span className="text-4xl">⌁</span>
+              <span className="mt-1 text-xl font-black">點我掃描</span>
+            </button>
+            <p className="mt-2 text-center text-[11px] font-bold text-zinc-500">
+              與倉管工作台相同：全螢幕相機；亦可關閉後用手動輸入區辨識。
+            </p>
           </div>
+        ) : null}
+
+        {!cameraMode ? (
+          <>
+            <label className="mt-6 grid gap-2">
+              <span className="sr-only">QR</span>
+              <textarea
+                className="min-h-[100px] rounded-lg border-2 border-zinc-400 bg-white px-3 py-2 font-mono text-sm font-bold text-zinc-900 shadow-sm"
+                value={qrInput}
+                onChange={(e) => setQrInput(e.target.value)}
+              />
+            </label>
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={lookup}
+              className="mt-5 min-h-[52px] w-full rounded-xl border-2 border-zinc-900 bg-zinc-900 text-lg font-black text-white shadow-sm disabled:opacity-50"
+            >
+              {busy ? "查詢中…" : "辨識"}
+            </button>
+          </>
+        ) : (
+          <label className="mt-6 grid gap-2">
+            <span className="text-xs font-bold text-zinc-600">
+              手動輸入（無需開啟相機）
+            </span>
+            <textarea
+              className="min-h-[88px] rounded-lg border-2 border-zinc-400 bg-white px-3 py-2 font-mono text-sm font-bold text-zinc-900 shadow-sm"
+              value={qrInput}
+              onChange={(e) => setQrInput(e.target.value)}
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={lookup}
+              className="min-h-[48px] w-full rounded-xl border-2 border-zinc-700 bg-white text-base font-black text-zinc-900 disabled:opacity-50"
+            >
+              {busy ? "查詢中…" : "手動辨識"}
+            </button>
+          </label>
         )}
-
-        <label className="mt-6 grid gap-2">
-          <span className="sr-only">QR</span>
-          <textarea
-            className="min-h-[100px] rounded-lg border-2 border-zinc-400 bg-white px-3 py-2 font-mono text-sm font-bold text-zinc-900 shadow-sm"
-            value={qrInput}
-            onChange={(e) => setQrInput(e.target.value)}
-          />
-        </label>
-
-        <button
-          type="button"
-          disabled={busy}
-          onClick={lookup}
-          className="mt-5 min-h-[52px] w-full rounded-xl border-2 border-zinc-900 bg-zinc-900 text-lg font-black text-white shadow-sm disabled:opacity-50"
-        >
-          {busy ? "查詢中…" : "辨識"}
-        </button>
 
         {errorMsg && (
           <div className="mt-4 rounded-xl border-2 border-zinc-800 bg-white px-4 py-3 text-center text-sm font-black text-zinc-900">
@@ -726,6 +815,74 @@ export function WarehouseTabScanWorkspace({
         )}
       </div>
 
+      {cameraMode && scanOpen ? (
+        <section className="fixed inset-0 z-[90] flex flex-col bg-black">
+          <div className="relative min-h-0 flex-1">
+            <video
+              ref={videoRef}
+              className="absolute inset-0 h-full w-full bg-black object-cover"
+              playsInline
+              muted
+              autoPlay
+            />
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4">
+              <div className="flex flex-col items-center">
+                <div
+                  className="relative h-[250px] w-[250px] shrink-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"
+                  aria-hidden
+                >
+                  <span className="absolute left-0 top-0 h-10 w-10 border-l-[4px] border-t-[4px] border-[#00FF00]" />
+                  <span className="absolute right-0 top-0 h-10 w-10 border-r-[4px] border-t-[4px] border-[#00FF00]" />
+                  <span className="absolute bottom-0 left-0 h-10 w-10 border-b-[4px] border-l-[4px] border-[#00FF00]" />
+                  <span className="absolute bottom-0 right-0 h-10 w-10 border-b-[4px] border-r-[4px] border-[#00FF00]" />
+                </div>
+                <p className="mt-5 text-center text-sm font-black tracking-wide text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  請將 QR 碼放入框內
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 space-y-2 rounded-t-2xl bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
+            {errorMsg ? (
+              <p className="rounded-lg bg-amber-50 px-2 py-2 text-center text-xs font-bold text-amber-950">
+                {errorMsg}
+              </p>
+            ) : null}
+            <p className="text-center text-[11px] font-bold text-slate-500">
+              相機將自動辨識；手動請貼上後按確認（與掃描同一支 API）。
+            </p>
+            <input
+              className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm font-bold text-slate-900"
+              placeholder="手動貼上 QR / 料號"
+              value={scanManualInput}
+              onChange={(e) => setScanManualInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void fetchRecord(scanManualInput);
+              }}
+            />
+            <button
+              type="button"
+              disabled={busy}
+              className="h-11 w-full rounded-xl bg-blue-800 text-sm font-black text-white disabled:opacity-50"
+              onClick={() => void fetchRecord(scanManualInput)}
+            >
+              {busy ? "辨識中…" : "確認辨識"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setScanOpen(false);
+                stopScanHardware();
+                setScanManualInput("");
+                setErrorMsg(null);
+              }}
+              className="h-11 w-full rounded-xl bg-slate-800 text-sm font-black text-white"
+            >
+              關閉
+            </button>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

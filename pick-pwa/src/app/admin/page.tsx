@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 import { WarehouseSupervisorNav } from "@/components/nav/WarehouseSupervisorNav";
 // 引入登出與清理邏輯
 import { clearSessionUser } from "@/lib/auth";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 import {
   deletePickingTasksForOrder,
   syncCommandTowerTasksToSupabase,
@@ -144,7 +144,9 @@ function pickUnit(row: Record<string, unknown>): string {
 }
 
 export default function AdminCommandCenter() {
-  const [warehouseUsers, setWarehouseUsers] = useState<any[]>([]); 
+  const [warehouseUsers, setWarehouseUsers] = useState<
+    Array<{ id: string; name: string }>
+  >([]); 
   const [tasks, setTasks] = useState<BoardTask[]>([]); 
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"loading" | "online" | "offline">("loading");
@@ -173,7 +175,7 @@ export default function AdminCommandCenter() {
   // 返回入口並登出（須先宣告供 initDashboard 使用）
   const handleBackToLogin = () => {
     clearSessionUser();
-    window.location.href = withTenantParam("/");
+    window.location.href = appHref("/");
   };
 
   const fetchUsers = async () => {
@@ -189,7 +191,9 @@ export default function AdminCommandCenter() {
       .order("name", { ascending: true });
 
     if (error) throw error;
-    setWarehouseUsers(data ?? []);
+    setWarehouseUsers(
+      (data ?? []) as Array<{ id: string; name: string }>,
+    );
   };
 
   const fetchTaskBoard = async () => {
@@ -266,13 +270,12 @@ export default function AdminCommandCenter() {
 
           for (const prev of Array.from(prevOrderNosRef.current)) {
             if (!nextOrders.has(prev)) {
-              await deletePickingTasksForOrder(client, "", prev);
+              await deletePickingTasksForOrder(client, prev);
             }
           }
 
           await syncCommandTowerTasksToSupabase(
             client,
-            "",
             tasks as CommandTowerTask[],
           );
 
@@ -300,10 +303,14 @@ export default function AdminCommandCenter() {
     reader.onload = (evt) => {
       const data = new Uint8Array(evt.target?.result as ArrayBuffer);
       const wb = XLSX.read(data, { type: "array" });
-      const raw: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      const raw = XLSX.utils.sheet_to_json(
+        wb.Sheets[wb.SheetNames[0]],
+      ) as Record<string, unknown>[];
       if (raw.length === 0) return;
 
-      const orderNo = raw[0]["order_no (單號)"] || raw[0]["order_no"] || "未知單號";
+      const orderNo = String(
+        raw[0]["order_no (單號)"] ?? raw[0]["order_no"] ?? "未知單號",
+      ).trim();
       const items = raw
         .map((row: Record<string, unknown>) => {
           const qty = pickRequiredQty(row);
@@ -470,7 +477,7 @@ export default function AdminCommandCenter() {
 
                 {expandedTaskId === t.id && (
                   <div className="mt-6 p-6 bg-slate-50 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-3 shadow-inner">
-                    {t.items.map((item: any, i: number) => (
+                    {t.items.map((item, i: number) => (
                       <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 gap-3">
                         <div>
                           <span className="font-mono text-xs text-slate-500 font-bold">{item.partNo}</span>

@@ -9,7 +9,7 @@ import {
   type LabelTypeCode,
   resolveSerialSource,
 } from "@/lib/labelEncoding";
-import { getEffectiveTenantSlug } from "@/lib/tenantContext";
+import { getEffectiveLabelPrefix } from "@/lib/labelPrefixEnv";
 import {
   bluetoothSendText,
   formatLabelPrintLines,
@@ -39,7 +39,6 @@ type Props = {
 };
 
 async function postLabelRecord(body: {
-  : string;
   label_type: LabelTypeCode;
   qr_payload: string;
   item_no: string;
@@ -69,7 +68,7 @@ export function LabelWorkbench({
   authMode = "session",
 }: Props) {
   const session = getSessionUser();
-  const labelPrefix = getEffectiveTenantSlug();
+  const labelPrefix = getEffectiveLabelPrefix();
 
   const [itemNo, setItemNo] = useState("");
   const [colorCode, setColorCode] = useState("");
@@ -176,7 +175,6 @@ export function LabelWorkbench({
         throw new Error("無法寫入紀錄：請先登入。");
       }
       await postLabelRecord({
-        : labelPrefix,
         label_type: typeCode,
         qr_payload: payload,
         item_no: recordItemNo,
@@ -306,7 +304,6 @@ export function LabelWorkbench({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              : labelPrefix,
               item_nos: uniqNos,
             }),
           },

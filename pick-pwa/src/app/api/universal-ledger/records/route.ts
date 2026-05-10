@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  getDefaultLabelPrefix,
-  normalizeLabelPrefix,
-} from "@/lib/labelEncoding";
-import {
   getSupabaseServiceRoleClient,
   missingServiceRoleResponse,
 } from "@/lib/supabaseAdmin";
 import { getPreviousLabelBalance } from "@/lib/universalLedgerBalance";
-import {
-  storageZonesSelectIdScope,
-  zoneRowScopeValue,
-} from "@/lib/storageZonesScope";
+import { storageZonesSelectIdScope } from "@/lib/storageZonesScope";
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +52,6 @@ export async function POST(req: Request) {
   }
 
   const b = body as Record<string, unknown>;
-  const  =
-    normalizeLabelPrefix(String(b. ?? "")) || getDefaultLabelPrefix();
   const unit_id = String(b.unit_id ?? "").trim();
   const qr_payload = String(b.qr_payload ?? "").trim();
   const label_record_id = String(b.label_record_id ?? "").trim();
@@ -73,7 +64,7 @@ export async function POST(req: Request) {
       : Number.parseInt(String(qtyRaw ?? ""), 10);
   const summary_in = String(b.summary ?? "");
 
-  if (! || !unit_id || !qr_payload || !operator_name) {
+  if (!unit_id || !qr_payload || !operator_name) {
     return NextResponse.json({ error: "缺少必填欄位" }, { status: 400 });
   }
   if (!label_record_id) {
@@ -101,17 +92,9 @@ export async function POST(req: Request) {
   if (zErr || !zone) {
     return NextResponse.json({ error: "管理單位不存在" }, { status: 400 });
   }
-  if (
-    normalizeLabelPrefix(
-      zoneRowScopeValue(zone as { ?: unknown; company_id?: unknown }),
-    ) !== 
-  ) {
-    return NextResponse.json({ error: "單位與公司識別不符" }, { status: 403 });
-  }
 
   const prevBal = await getPreviousLabelBalance(
     admin,
-    ,
     unit_id,
     label_record_id,
   );
@@ -134,7 +117,6 @@ export async function POST(req: Request) {
   const { data: inserted, error: insErr } = await admin
     .from("universal_ledger_records")
     .insert({
-      ,
       unit_id,
       label_record_id,
       qr_payload,

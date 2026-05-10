@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * 取得環境變數的輔助函式
@@ -51,8 +51,11 @@ export const supabase = getSupabaseBrowserClient();
  * 【除錯工具】掛載至全域 window 物件
  * 解決您在 Console 測試時出現的 reading 'from' of undefined 錯誤
  */
-if (typeof window !== 'undefined') {
-  (window as any).supabase = supabase;
+if (typeof window !== "undefined") {
+  (
+    window as Window &
+      typeof globalThis & { supabase?: SupabaseClient }
+  ).supabase = supabase;
   // 佈署後可在 Console 看到此訊息，確認初始化成功
   if (getSupabaseUrl()) {
     console.log("✅ Supabase Client 已成功掛載至 window.supabase");

@@ -47,7 +47,6 @@ function pickingLogOrderQueryVariants(distinctOrders: string[]): string[] {
 export async function aggregatePickingLogQtyByOrders(
   supabase: SupabaseClient,
   distinctOrderStrings: string[],
-  _tenantSlug?: string,
 ): Promise<Map<string, number>> {
   const qtyByPair = new Map<string, number>();
   const uniq = Array.from(
@@ -58,7 +57,7 @@ export async function aggregatePickingLogQtyByOrders(
 
   for (let i = 0; i < expandedForQuery.length; i += ORDER_IN_CHUNK) {
     const slice = expandedForQuery.slice(i, i + ORDER_IN_CHUNK);
-    let q = supabase
+    const q = supabase
       .from("picking_logs")
       .select("order_no,item_no,actual_qty")
       .in("order_no", slice);
@@ -80,7 +79,6 @@ export async function aggregatePickingLogQtyByOrders(
 export async function sumMatchedActualQtyByTask(
   supabase: SupabaseClient,
   tasks: TaskLike[],
-  tenantSlug?: string,
 ): Promise<Map<string, number>> {
   const sums = new Map<string, number>();
   for (const t of tasks) sums.set(t.id, 0);
@@ -95,11 +93,7 @@ export async function sumMatchedActualQtyByTask(
   const orders = Array.from(
     new Set(tasks.map((t) => String(t.order_no ?? "").trim()).filter(Boolean)),
   );
-  const qtyByPair = await aggregatePickingLogQtyByOrders(
-    supabase,
-    orders,
-    tenantSlug,
-  );
+  const qtyByPair = await aggregatePickingLogQtyByOrders(supabase, orders);
 
   qtyByPair.forEach((qtyTotal, pk) => {
     const id = firstIdForPair.get(pk);

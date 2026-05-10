@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import useSWR from "swr";
-import { withTenantParam } from "@/lib/tenantNav";
+import { appHref } from "@/lib/appHref";
 
 type TxRow = {
   id?: string;
@@ -46,7 +46,7 @@ export default function OperatorTransactionsPage() {
       <header className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <Link
-            href={withTenantParam("/operator")}
+            href={appHref("/operator")}
             className="rounded-lg px-2 py-1 text-xl font-black text-slate-700 hover:bg-slate-100"
           >
             ←

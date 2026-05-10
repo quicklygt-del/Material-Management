@@ -42,13 +42,24 @@ export async function POST(req: Request) {
 
   const delta = action === "pick" ? -quantity : quantity;
 
-  const pick = await admin
+  let pick = await admin
     .from("warehouse_ledger_stock")
     .select("id,stock_quantity,on_hand")
     .eq("item_no", item_no)
     .maybeSingle();
+  if (
+    pick.error &&
+    /column .*stock_quantity.* does not exist/i.test(pick.error.message)
+  ) {
+    pick = await admin
+      .from("warehouse_ledger_stock")
+      .select("id,on_hand")
+      .eq("item_no", item_no)
+      .maybeSingle();
+  }
   if (pick.error) {
-    return NextResponse.json({ error: pick.error.message }, { status: 500 });
+    const em = pick.error.message ?? "";
+    return NextResponse.json({ error: em }, { status: 500 });
   }
 
   const current =
@@ -61,26 +72,50 @@ export async function POST(req: Request) {
     ) || 0;
   const next = current + delta;
 
+  const hasStockQtyColumn =
+    pick.data != null && "stock_quantity" in (pick.data as object);
+
   if (!pick.data) {
-    const { error: insErr } = await admin.from("warehouse_ledger_stock").insert({
-      item_no,
-      item_name: "",
-      spec: "",
-      stock_quantity: next,
-    });
-    if (insErr) {
-      return NextResponse.json({ error: insErr.message }, { status: 500 });
+    const baseRow = { item_no, item_name: "", spec: "" };
+    let ins = await admin
+      .from("warehouse_ledger_stock")
+      .insert({ ...baseRow, stock_quantity: next });
+    if (
+      ins.error &&
+      /column .*stock_quantity.* does not exist/i.test(ins.error.message)
+    ) {
+      ins = await admin
+        .from("warehouse_ledger_stock")
+        .insert({ ...baseRow, on_hand: next });
+    }
+    if (ins.error) {
+      const em = ins.error.message ?? "";
+      return NextResponse.json({ error: em }, { status: 500 });
     }
   } else {
-    const { error: upErr } = await admin
+    const patch = hasStockQtyColumn
+      ? { stock_quantity: next, updated_at: new Date().toISOString() }
+      : { on_hand: next, updated_at: new Date().toISOString() };
+    let up = await admin
       .from("warehouse_ledger_stock")
-      .update({
-        stock_quantity: next,
-        updated_at: new Date().toISOString(),
-      })
+      .update(patch)
       .eq("id", (pick.data as { id: string }).id);
-    if (upErr) {
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
+    if (
+      up.error &&
+      hasStockQtyColumn &&
+      /column .*stock_quantity.* does not exist/i.test(up.error.message)
+    ) {
+      up = await admin
+        .from("warehouse_ledger_stock")
+        .update({
+          on_hand: next,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", (pick.data as { id: string }).id);
+    }
+    if (up.error) {
+      const em = up.error.message ?? "";
+      return NextResponse.json({ error: em }, { status: 500 });
     }
   }
 

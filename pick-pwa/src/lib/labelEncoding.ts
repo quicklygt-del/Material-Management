@@ -18,9 +18,10 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** 與 DB label_records.、QR 第一段一致；核心模式固定 CARB。 */
+/** 標籤 QR 可選前綴；未設環境變數時為空（單段流水格式）。 */
 export function getDefaultLabelPrefix(): string {
-  return "CARB";
+  const raw = process.env.NEXT_PUBLIC_LABEL_PREFIX?.trim();
+  return raw ? normalizeLabelPrefix(raw) : "";
 }
 
 export function normalizeLabelPrefix(raw: string): string {
@@ -31,9 +32,6 @@ export function normalizeLabelPrefix(raw: string): string {
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 16);
 }
-
-/** @deprecated 使用 normalizeLabelPrefix */
-export const normalizeTenantId = normalizeLabelPrefix;
 
 /** 料號末 4 字元（不足則左側補零／符號） */
 export function lastFourFromItemNo(itemNo: string): string {
@@ -93,9 +91,6 @@ export function buildLabelQrPayload(params: {
   at?: Date;
 }): string {
   const prefix = getDefaultLabelPrefix();
-  if (!prefix) {
-    throw new Error("請設定公司識別前綴");
-  }
   const src = params.serialSource.replace(/\uFEFF/g, "").trim();
   if (params.typeCode !== "B" && params.typeCode !== "D" && !src) {
     throw new Error("請輸入料號");
@@ -104,7 +99,10 @@ export function buildLabelQrPayload(params: {
     throw new Error("需名稱或描述至少一項");
   }
   const serial = buildSerialSegment(src || "0000", params.at ?? new Date());
-  return `${prefix}-${params.typeCode}-${serial}`;
+  if (prefix) {
+    return `${prefix}-${params.typeCode}-${serial}`;
+  }
+  return `${params.typeCode}-${serial}`;
 }
 
 /** 解析標籤 QR 字串（前三段） */
@@ -115,13 +113,24 @@ export function parseLabelQrPayload(raw: string): {
 } | null {
   const t = raw.replace(/\uFEFF/g, "").trim();
   const parts = t.split("-");
-  if (parts.length < 3) return null;
-  const prefix = parts[0] ?? "";
-  const typeChar = (parts[1] ?? "").toUpperCase();
-  const serial = parts.slice(2).join("-");
-  const typeCode =
-    typeChar === "S" || typeChar === "R" || typeChar === "B" || typeChar === "Q" || typeChar === "D"
-      ? (typeChar as LabelTypeCode)
-      : null;
-  return { prefix, typeCode, serial };
+  if (parts.length >= 3) {
+    const prefix = parts[0] ?? "";
+    const typeChar = (parts[1] ?? "").toUpperCase();
+    const serial = parts.slice(2).join("-");
+    const typeCode =
+      typeChar === "S" || typeChar === "R" || typeChar === "B" || typeChar === "Q" || typeChar === "D"
+        ? (typeChar as LabelTypeCode)
+        : null;
+    return { prefix, typeCode, serial };
+  }
+  if (parts.length === 2) {
+    const typeChar = (parts[0] ?? "").toUpperCase();
+    const serial = parts[1] ?? "";
+    const typeCode =
+      typeChar === "S" || typeChar === "R" || typeChar === "B" || typeChar === "Q" || typeChar === "D"
+        ? (typeChar as LabelTypeCode)
+        : null;
+    return { prefix: "", typeCode, serial };
+  }
+  return null;
 }

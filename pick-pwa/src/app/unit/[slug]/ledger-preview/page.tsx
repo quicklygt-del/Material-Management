@@ -12,7 +12,6 @@ type UnitCtxLite = {
   unit_id: string;
   slug: string;
   name: string;
-  : string;
 };
 
 export default function UnitLedgerPreviewPage() {
@@ -43,7 +42,6 @@ export default function UnitLedgerPreviewPage() {
         unit_id: String(j.unit_id ?? ""),
         slug,
         name: String(j.name ?? ""),
-        : String(j. ?? ""),
       });
       if (slug && slug !== slugParam) {
         router.replace(`/unit/${encodeURIComponent(slug)}/ledger-preview`);
@@ -59,7 +57,6 @@ export default function UnitLedgerPreviewPage() {
     setLinesBusy(true);
     try {
       const u = new URL("/api/universal-ledger/lines", window.location.origin);
-      u.searchParams.set("tenant", ctx.);
       u.searchParams.set("unit_id", ctx.unit_id);
       const res = await fetch(u.toString(), { credentials: "include" });
       const json = (await res.json()) as {
@@ -80,7 +77,7 @@ export default function UnitLedgerPreviewPage() {
   }, [loadLines]);
 
   const exportHref = ctx
-    ? `/api/universal-ledger/export?tenant=${encodeURIComponent(ctx.)}&unit_id=${encodeURIComponent(ctx.unit_id)}&format=xlsx`
+    ? `/api/universal-ledger/export?unit_id=${encodeURIComponent(ctx.unit_id)}&format=xlsx`
     : "#";
 
   const homeHref = ctx

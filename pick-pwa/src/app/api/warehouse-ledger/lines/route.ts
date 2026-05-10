@@ -25,18 +25,33 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "缺少 item_no" }, { status: 400 });
   }
 
-  const { data, error } = await admin
+  const fullSel =
+    "id,direction,qty_delta,balance_after,shortage_forced,ref,created_at,tx_type,from_bin,to_bin,operator_name,bin_balance_after";
+  const miniSel =
+    "id,direction,qty_delta,balance_after,shortage_forced,ref,created_at";
+
+  const q1 = await admin
     .from("warehouse_ledger_lines")
-    .select(
-      "id,direction,qty_delta,balance_after,shortage_forced,ref,created_at",
-    )
+    .select(fullSel)
     .eq("item_no", itemNo)
     .order("created_at", { ascending: false })
     .limit(limit);
+  let linesOut: unknown[] | null = q1.data as unknown[] | null;
+  let error = q1.error;
+  if (error && /column|42703|does not exist/i.test(error.message)) {
+    const q2 = await admin
+      .from("warehouse_ledger_lines")
+      .select(miniSel)
+      .eq("item_no", itemNo)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    linesOut = q2.data as unknown[] | null;
+    error = q2.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ lines: data ?? [], item_no: itemNo });
+  return NextResponse.json({ lines: linesOut ?? [], item_no: itemNo });
 }

@@ -14,7 +14,7 @@ create table if not exists public.storage_zones (
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_storage_zones_tenant on public.storage_zones ();
+create index if not exists idx_storage_zones_ on public.storage_zones ();
 
 comment on table public.storage_zones is '虛擬倉／管理區；每租戶最多 5 筆（由應用程式限制）';
 
@@ -46,7 +46,7 @@ create table if not exists public.material_transactions (
   created_at timestamptz not null default now()
 );
 
-create index if not exists idx_material_tx_tenant_item
+create index if not exists idx_material_tx__item
   on public.material_transactions (, material_item_no);
 create index if not exists idx_material_tx_label
   on public.material_transactions (label_record_id);
@@ -82,7 +82,7 @@ alter table public.universal_ledger_records
 comment on column public.universal_ledger_records.summary is '物料卡摘要（通常為標籤內容說明）';
 comment on column public.universal_ledger_records.balance_after is '本筆異動後該標籤於此單位之結餘';
 
-create index if not exists idx_universal_ledger_tenant_unit
+create index if not exists idx_universal_ledger__unit
   on public.universal_ledger_records (, unit_id);
 create index if not exists idx_universal_ledger_label_unit
   on public.universal_ledger_records (label_record_id, unit_id);

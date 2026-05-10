@@ -1,12 +1,12 @@
--- Single-tenant simplification for existing public.picking_tasks
+-- Single- simplification for existing public.picking_tasks
 -- 1) unify quantity columns to numeric: target_qty + picked_qty
--- 2) unify item key to item_code
+-- 2) unify item key to item_no
 -- 3) keep existing table, no new table
 --
 -- 相容「已刪除 item_no / required_qty」的庫：僅在欄位存在時才回填。
 
 alter table public.picking_tasks
-  add column if not exists item_code text;
+  add column if not exists item_no text;
 
 alter table public.picking_tasks
   add column if not exists item_name text;
@@ -14,7 +14,7 @@ alter table public.picking_tasks
 alter table public.picking_tasks
   add column if not exists unit text;
 
--- 若有舊欄位 item_no，才用它回填 item_code
+-- 若有舊欄位 item_no，才用它回填 item_no
 do $$
 begin
   if exists (
@@ -25,16 +25,16 @@ begin
       and column_name = 'item_no'
   ) then
     update public.picking_tasks
-    set item_code = coalesce(
-      nullif(trim(item_code), ''),
+    set item_no = coalesce(
+      nullif(trim(item_no), ''),
       nullif(trim(item_no), '')
     )
-    where item_code is null or trim(item_code) = '';
+    where item_no is null or trim(item_no) = '';
   end if;
 end $$;
 
 alter table public.picking_tasks
-  alter column item_code set not null;
+  alter column item_no set not null;
 
 alter table public.picking_tasks
   add column if not exists target_qty numeric not null default 0;
@@ -64,8 +64,8 @@ set picked_qty = coalesce(picked_qty, 0);
 alter table public.picking_tasks drop column if exists item_no cascade;
 alter table public.picking_tasks drop column if exists required_qty cascade;
 
--- Rebuild unique index on single-tenant key
+-- Rebuild unique index on single- key
 drop index if exists public.idx_picking_tasks_order_item;
-drop index if exists public.idx_picking_tasks_tenant_order_item;
-create unique index if not exists idx_picking_tasks_order_item_code
-  on public.picking_tasks (order_no, item_code);
+drop index if exists public.idx_picking_tasks__order_item;
+create unique index if not exists idx_picking_tasks_order_item_no
+  on public.picking_tasks (order_no, item_no);
