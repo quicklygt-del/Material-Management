@@ -3,7 +3,7 @@
   "private": true,
   "description": "Repo root for Vercel/Git: Next.js app lives in pick-pwa/",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "next": "14.2.35",
