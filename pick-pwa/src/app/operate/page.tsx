@@ -21,7 +21,6 @@ type PickingTaskRow = {
   id: string;
   order_no: string;
   item_no: string;
-  item_no?: string;
   item_name?: string;
   spec?: string;
   unit?: string;
@@ -760,7 +759,7 @@ function OperatePageContent() {
         item_name: normItemNo(String(t.item_name ?? "")).trim() || undefined,
         unit: normItemNo(String(t.unit ?? "")).trim() || undefined,
         spec: normItemNo(String(t.spec ?? "")).trim() || undefined,
-        item_no: normItemNo(String(t.item_no ?? "")).trim() || undefined,
+        item_no: normItemNo(String(t.item_no ?? "")).trim(),
         is_blind_count:
           typeof t.is_blind_count === "boolean" ? t.is_blind_count : undefined,
         picked_qty: Math.max(
